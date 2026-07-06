@@ -2396,7 +2396,7 @@ flowchart LR
         FAELv2["FAEL: PackageReference<br/>Sistec.Core 5.0.0"]
     end
 
-    Oggi -->|"Passaggio obbligato: riconciliazione"| Domani
+    Oggi -->|Passaggio obbligato: riconciliazione| Domani
 
 </div></div>
     <p>Il modello NuGet <strong>risolve il problema a regime</strong> (una volta pubblicato, non si può più divergere), ma richiede un passaggio intermedio di <strong>riconciliazione</strong> dei due branch.</p>
@@ -2728,8 +2728,8 @@ flowchart LR
 
     AUTH --> LOGIN
     LOGIN --> EMP
-    ROL -->|"CanEditParameters"| UI
-    EMP -->|"FK"| LOG
+    ROL -->|CanEditParameters| UI
+    EMP -->|FK| LOG
     LOG --> DASH
 
 </div></div>
@@ -5376,8 +5376,8 @@ flowchart TB
         B4["Allarmi: 1 Emergency, 2 Warning"]
     end
 
-    StatoNormale -->|"Joint 3 overload"| StatoAnomalo
-    StatoAnomalo -->|"Risolto"| StatoNormale
+    StatoNormale -->|Joint 3 overload| StatoAnomalo
+    StatoAnomalo -->|Risolto| StatoNormale
 
 </div></div>
     <p><strong>Regola pratica:</strong> se un elemento non richiede attenzione, deve essere visivamente quasi invisibile. Un operatore che vede tutto colorato non vede nulla.</p>
@@ -5548,7 +5548,7 @@ flowchart LR
     JA --> Resp
     AS --> Resp
     TP --> Resp
-    Resp -->|"risposta testuale<br/>all'operatore"| NL
+    Resp -->|risposta testuale<br/>all'operatore| NL
 
 </div></div>
     <h4>Intent Supportati</h4>
@@ -6861,12 +6861,16 @@ Fase 3 — Unified Namespace completo
   async function renderMermaid(pageEl) {
     const mermaidNodes = pageEl.querySelectorAll('.mermaid');
     if (mermaidNodes.length === 0) return;
-    try {
-      await mermaid.run({ nodes: Array.from(mermaidNodes) });
-      setupMermaidButtons();
-    } catch(e) {
-      console.warn('Mermaid render error:', e);
+    for (let i = 0; i < mermaidNodes.length; i++) {
+      const node = mermaidNodes[i];
+      try {
+        await mermaid.run({ nodes: [node] });
+      } catch(e) {
+        const snippet = (node.textContent || '').split('\n')[0].slice(0, 80);
+        console.error('MERMAID ERROR (page ' + currentPage + ', diagram ' + i + '):', e.message, '- first line:', snippet);
+      }
     }
+    setupMermaidButtons();
   }
 
   function goToPage(idx) {

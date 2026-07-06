@@ -108,7 +108,9 @@ def process_blocks(lines):
             if lang == 'mermaid':
                 content = "".join(code_lines)
                 content = content.replace('&lt;', '<').replace('&gt;', '>')
-                import re; content = re.sub(r',\s*optional\b', '', content)
+                import re
+                content = re.sub(r',\s*optional\b', '', content)
+                content = re.sub(r'\|"([^"]*)"\|', r'|\1|', content)
                 current_content.append(f'<div class="mermaid-wrapper"><div class="mermaid">\n{content}\n</div></div>')
             else:
                 code_text = html_mod.escape("".join(code_lines))
@@ -843,12 +845,16 @@ def build_html(sections):
   async function renderMermaid(pageEl) {{
     const mermaidNodes = pageEl.querySelectorAll('.mermaid');
     if (mermaidNodes.length === 0) return;
-    try {{
-      await mermaid.run({{ nodes: Array.from(mermaidNodes) }});
-      setupMermaidButtons();
-    }} catch(e) {{
-      console.warn('Mermaid render error:', e);
+    for (let i = 0; i < mermaidNodes.length; i++) {{
+      const node = mermaidNodes[i];
+      try {{
+        await mermaid.run({{ nodes: [node] }});
+      }} catch(e) {{
+        const snippet = (node.textContent || '').split('\\n')[0].slice(0, 80);
+        console.error('MERMAID ERROR (page ' + currentPage + ', diagram ' + i + '):', e.message, '- first line:', snippet);
+      }}
     }}
+    setupMermaidButtons();
   }}
 
   function goToPage(idx) {{

@@ -163,6 +163,88 @@ flowchart TB
 | 12 | **SafeInvoke** | Pattern `Control.SafeInvoke` | Pattern `Control.SafeInvoke` in `Bus.cs`, `KrcClientCollection` |
 | 13 | **Namespace Incoerente** | `RootNamespace = Sistec` in HMI e Common | DUT in namespace `Sistec.DUT` invece di `Sistec.Common.DUT` |
 
+### 1.6 Sistec.Opc.Ua — Valutazione Libreria OPC UA
+
+La libreria `Sistec.Opc.Ua` è il wrapper attorno all'OPC Foundation SDK (v1.5.376.244) usato da entrambe le commesse per tutta la comunicazione col PLC. È condivisa (stesso codice base) ma ha divergenze tra LAG e FAEL.
+
+| Metrica | LAG | FAEL |
+|---|---|---|
+| File `.cs` | 19 | 19 |
+| Linee totali | 2.445 | 2.170 |
+| `OpcUaClient` (god class) | 769 righe | 757 righe |
+| `OpcUaTagValue<T>` | 422 righe | 199 righe |
+| `UAClient` (wrapper SDK) | 411 righe | 411 righe |
+| `ClientAction` enum | `Renew`, `Shutdown` | `None`, `Shutdown` |
+| Implementa `IDisposable`? | ❌ No | ❌ No |
+| Classi / Interfacce | 14 / 3 | 14 / 3 |
+| Dipendenze NuGet | OPC Foundation + Serilog + MEL 10.x | identico |
+| Target framework | `netstandard2.1` | `netstandard2.1` |
+
+**Giudizio sintetico:** Stabile in funzionamento nominale, fragile in scenari di recovery, riavvio e carico.
+
+#### Problemi Critici
+
+| # | Problema | Dove | Impatto |
+|---|----------|------|---------|
+| 1 | **`OpcUaClient` non `IDisposable`** | `OpcUaClient.cs` (intera classe) | Possiede `UAClient` (IDisposable) + `CancellationTokenSource`. Risorse rilasciate solo dentro `_StartClient` che può non essere chiamato o terminare anormalmente. |
+| 2 | **Eccezioni tutte inghiottite** | `OpcUaClient.cs:226-229` | `_StartClient` cattura `Exception ex` e fa solo debug log. Il loop di connessione non segnala mai fallimenti irreversibili. |
+| 3 | **Busy-wait 100% CPU** | `OpcUaClientCollection.cs:57-60` | `while (opcUaClient.IsConnected) { }` — zero attesa, brucia un core. |
+| 4 | **Event handler lambda leak** | `OpcUaClient.cs:174-183` | `Disconnected`/`Reconnected` con lambda mai unsubscribed. Ogni ciclo di connessione crea nuove lambda; il vecchio `UAClient` non viene GC'd. |
+| 5 | **`WRITE_TIMEOUT` statico mutabile** | `OpcUaClient.cs:31` | `public static int` — chiunque può cambiarlo, affetta tutte le istanze globalmente. |
+| 6 | **Renew path dead code** (solo LAG) | `OpcUaClient.cs:755-759` | `ClientAction.Renew` mai assegnato. `ResubscribeForwardingAsync` e tutto il ramo renew sono irraggiungibili. |
+| 7 | **17/26 await senza ConfigureAwait(false)** | `OpcUaClient.cs` (sparso) | Rischio deadlock se usato da contesto synchronized (UI thread). |
+| 8 | **`HashSet<Subscription>` non thread-safe** | `OpcUaClient.cs:26` | `_pendingSubscriptions` accesso da keepalive e registrazione in concorrenza — corruzione dati possibile. |
+
+#### Problemi Alti
+
+| # | Problema | Dove | Impatto |
+|---|----------|------|---------|
+| 9 | **Overflow bug in waitTime** | `OpcUaClient.cs:123` | `int.MaxValue - elapsed` wrappa a negativo quando timeout è default. |
+| 10 | **Fire-and-forget in StartClient** | `OpcUaClient.cs:323-334` | `Task.Run(async () => ...)` senza gestione eccezioni → `UnobservedTaskException`. |
+| 11 | **Dati hardcoded sovrascrivono config** | `OpcUaClient.cs:135-172` | `SessionLifeTime=120s`, `ReconnectPeriod=5s`, `KeepAliveInterval=5s` ignorano file XML. |
+| 12 | **`UseWindowsForms=true` inutile** | `.csproj:8` | Flag presente ma nessun controllo WinForms usato. Artefatto. |
+| 13 | **God class + god method** | `OpcUaClient` (769 righe) + `_StartClient` (~170 righe) | SRP violato, impossibile testare isolatamente. |
+| 14 | **`GlobalContext.MaxArrayLength` modificato** | `Converter.FromBus.cs:86` | Stato globale mutato da una libreria, side-effect su tutta l'app. |
+
+#### Differenze LAG vs FAEL
+
+| Aspetto | LAG | FAEL | Migliore |
+|---------|-----|------|----------|
+| `SamplingInterval` | `1` (fastest possible) | `-1` (usa PublishingInterval) | FAEL — meno pressione sul PLC |
+| `QueueSize` | `10` | `2` | FAEL — sufficiente con DiscardOldest |
+| `LifetimeCount` / `MinLifetimeInterval` | `0` / `120_000` | `15` / `60_000` | FAEL — rispetta OPC UA Part 4 §5.13 |
+| StackOverflow fix in `RegisterTags` | ❌ Nessuno | ✅ Skip se session disconnessa | FAEL |
+| Null-safety `ReadNodeAsync` | ❌ NRE possibile | ✅ `Task.FromResult(default)` | FAEL |
+| `[Obsolete]` su `Subscribe` | ❌ No | ✅ Sì | FAEL |
+| `OpcUaTagValue<T>` | 422 righe, `Monitor.TryEnter` + sync-over-async | 199 righe, snello | FAEL |
+
+**Conclusione:** FAEL ha ricevuto bugfix sostanziali che LAG non ha. La versione FAEL è la **baseline consigliata** per il nuovo `Sistec.PLC.Stack`.
+
+#### Impatto sull'Architettura Target
+
+**Attenzione — principio chiave:** `Sistec.OpcUa.Library` è una libreria **orizzontale**, NON una libreria verticale del solo PLC. Può essere usata da PIÙ stack (PLC, Sinumerik, e potenzialmente robot KUKA se via OPC UA). Non va duplicata. Lo stesso vale per `Sistec.Modbus.Library` e `Sistec.Tcp.Library`.
+
+Nell'architettura a stack verticali (§2), `Sistec.Opc.Ua` si decompone in:
+
+| Progetto | Tipo | Ruolo | Ereditato da |
+|---|---|---|---|
+| `Sistec.OpcUa.Library` | **Orizzontale** (condivisa) | `UAClient`, session management, certificati, subscription lifecycle — protocollo OPC UA puro, zero logica di dominio | `UAClient.cs` (buono), `OpcUaClient.cs` (solo parte connection/session) |
+| `Sistec.PLC.Stack.Client` | Verticale (solo PLC) | `OpcUaClientCollection`, strategia di registrazione tag PLC, autodiscovery — costruito SOPRA `Sistec.OpcUa.Library` | `OpcUaClientCollection.cs` (da rifare senza busy-wait) |
+| `Sistec.PLC.Stack.Driver` | Verticale | `IPlcTagProvider`, `OpcUaTagFactory`, tag DUT (da codegen) | `OpcUaTagValue.cs` (FAEL), `OpcUaTagFactory.cs` |
+| `Sistec.PLC.Stack.Services` | Verticale | `PlcConnectionService`, `WatchdogService`, `ModeService` | Da scrivere |
+| `Sistec.PLC.Stack.UI` | Verticale | `PlcStatusControl`, `WatchdogIndicator` | Da scrivere |
+| `Sistec.PLC.Stack.Simulator` | Verticale | `FakeOpcUa` unico (non 13 copie) | Da scrivere |
+| `Sistec.Sinumerik.Stack.Client` | Verticale (solo CNC) | Wrapper OPC UA per CNC Siemens ONE — costruito SOPRA `Sistec.OpcUa.Library` | Da scrivere |
+
+**Regola:** Se un domani KUKA dovesse supportare OPC UA, `Sistec.Kuka.Stack.Client` dipenderà da `Sistec.OpcUa.Library` — senza duplicare nulla.
+
+La logica di connessione, certificati, riconnessione va mantenuta ma con:
+- `IDisposable` pattern standard
+- `CancellationToken` canonicamente usato (non `Task.Delay(Infinite)`)
+- `SemaphoreSlim` o `ConcurrentQueue` per `_pendingSubscriptions`
+- Eventi con weak reference o unsubscribe esplicito
+- `ReconnectionPolicy` configurabile via `IOptions<T>`
+
 ---
 
 ## 2. Architettura Proposta: Stack Verticali Unificati
@@ -188,20 +270,38 @@ Ogni dispositivo/dominio diventa uno **stack verticale** con 5 layer:
 
 ```mermaid
 flowchart TB
+    subgraph Legend["LEGENDA RELAZIONI"]
+        DEP_DOTTED["● - - -> Dipende da libreria<br/>orizzontale (condivisa)"]
+        DEP_SOLID["● ──→ Dipende da layer interno<br/>dello stesso stack"]
+    end
+
     subgraph Stack["Sistec.<Nome>.Stack (es. Sistec.Kuka.Stack)"]
         direction TB
         UI["Sistec.<Nome>.Stack.UI<br/>UserControls, Pages<br/>WinForms view layer"]
         SVC["Sistec.<Nome>.Stack.Services<br/>Orchestrators, Use Cases<br/>Logica applicativa"]
         DRV["Sistec.<Nome>.Stack.Driver<br/>ITagProvider, TagValue&lt;T&gt;<br/>Astrazione device → dominio"]
-        CLI["Sistec.<Nome>.Stack.Client<br/>TCP/Modbus/OPC UA client<br/>Protocollo di comunicazione puro"]
+        CLI["Sistec.<Nome>.Stack.Client<br/>Logica client DEVICE-SPECIFICA<br/>(usa libreria orizzontale<br/>per il protocollo)"]
         SIM["Sistec.<Nome>.Stack.Simulator<br/>Server mock / device finto<br/>Test e sviluppo offline"]
+    end
+
+    subgraph Horizontal["LIBRERIE ORIZZONTALI<br/>(condivise, MAI duplicate)"]
+        TcpLib["Sistec.Tcp.Library<br/>Socket pool, reconnect,<br/>message framing"]
+        ModbusLib["Sistec.Modbus.Library<br/>Client/Server Modbus TCP"]
+        OpcUaLib["Sistec.OpcUa.Library<br/>UAClient, Session,<br/>MonitoredItem"]
     end
 
     UI --> SVC
     SVC --> DRV
     DRV --> CLI
     SIM --> CLI
+    CLI -.-o TcpLib
+    CLI -.-o ModbusLib
+    CLI -.-o OpcUaLib
+
+    style Horizontal fill:#e0f7fa,stroke:#006064,stroke-dasharray: 5 5
 ```
+
+**NB:** Il layer `Client` di ogni stack NON reimplementa il protocollo — usa le librerie orizzontali `Sistec.Tcp.Library`, `Sistec.Modbus.Library`, `Sistec.OpcUa.Library`. Queste sono **un'istanza unica, condivisa tra tutti gli stack che ne hanno bisogno** (es. `Sistec.OpcUa.Library` è usata da PLC e Sinumerik, e opzionalmente da KUKA).
 
 ### 2.3 Mappa degli Stack
 
@@ -213,14 +313,15 @@ flowchart TB
         SistecUI["Sistec.UI<br/>Layout pagine, menu,<br/>alarm banner, user management"]
     end
 
-    subgraph Comunicazione["LIBRERIE ORIZZONTALI"]
-        OpcUaLib["Sistec.OpcUa.Library<br/>IUAClient, MonitoredItem<br/>Session management puro"]
-        ModbusLib["Sistec.Modbus.Library<br/>EasyModbus puro<br/>Client/Server Modbus TCP"]
+    subgraph Comunicazione["LIBRERIE ORIZZONTALI (condivise, MAI duplicate per stack)"]
+        TcpLib["Sistec.Tcp.Library<br/>Socket pool, reconnect<br/>message framing<br/>(usata da KUKA, Safan)"]
+        OpcUaLib["Sistec.OpcUa.Library<br/>UAClient, Session,<br/>MonitoredItem<br/>(usata da PLC, Sinumerik,<br/>opzionalmente KUKA)"]
+        ModbusLib["Sistec.Modbus.Library<br/>EasyModbus puro<br/>Client/Server Modbus TCP<br/>(usata da ESA)"]
         BusLib["Sistec.Bus.Library<br/>Zebus pub/sub o HTTP+Redis<br/>Comunicazione inter-pannello"]
     end
 
     subgraph Macchine["STACK VERTICALI — MACCHINE"]
-        Kuka["Sistec.Kuka.Stack<br/>Robot KUKA KRC<br/>Client TCP · Driver · Services · UI · Simulator"]
+        Kuka["Sistec.Kuka.Stack<br/>Robot KUKA KRC<br/>Client · Driver · Services · UI · Simulator"]
         Safan["Sistec.Safan.Stack<br/>Pressa Safan (TCP)<br/>Client · Driver · Services · UI · Simulator"]
         Esa["Sistec.Esa.Stack<br/>Pressa ESA (Modbus)<br/>Client · Driver · Services · UI · Simulator"]
         PlcInt["Sistec.PLC.Stack<br/>Interfaccia PLC (OPC UA)<br/>Client · Driver · Services · UI · Simulator"]
@@ -257,11 +358,12 @@ flowchart TB
     Production -->|usa| Sinumerik
     Production -->|usa| JobMgmt
 
-    Kuka --> OpcUaLib
-    Safan --> Core
-    Esa --> ModbusLib
-    PlcInt --> OpcUaLib
-    Sinumerik --> OpcUaLib
+    Kuka -.->|TCP| TcpLib
+    Kuka -.->|opzionale OPC UA| OpcUaLib
+    Safan -.->|TCP| TcpLib
+    Esa -.->|Modbus| ModbusLib
+    PlcInt -.->|OPC UA| OpcUaLib
+    Sinumerik -.->|OPC UA| OpcUaLib
 
     Kuka --> Core
     Safan --> Core
@@ -286,34 +388,84 @@ flowchart TB
     classDef infra fill:#e0f7fa,stroke:#006064
 
     class Core,Controls,SistecUI foundation
-    class OpcUaLib,ModbusLib,BusLib comm
+    class TcpLib,OpcUaLib,ModbusLib,BusLib comm
     class Kuka,Safan,Esa,PlcInt,Sinumerik machine
     class Production,JobMgmt,Maintenance,Alarms app
     class PersAbst,PersDapper,PersMySql,PersSqlSrv,PersUoW data
     class ConfigLib,DUTGen infra
 ```
 
-### 2.4 Stack KUKA — Dettaglio (Esempio Completo)
+### 2.4 Librerie Orizzontali: Principio di Non Duplicazione
+
+Le librerie orizzontali (`Sistec.Tcp.Library`, `Sistec.Modbus.Library`, `Sistec.OpcUa.Library`) sono **un'unica istanza condivisa tra tutti gli stack**. Non vanno mai replicate:
+
+```mermaid
+flowchart LR
+    subgraph Orizzontali["LIBRERIE ORIZZONTALI — UNA SOLA COPIA"]
+        Tcp["Sistec.Tcp.Library"]
+        Opc["Sistec.OpcUa.Library"]
+        Mod["Sistec.Modbus.Library"]
+    end
+
+    subgraph Stacks["STACK CHE LE USANO"]
+        Kuka_Client["Sistec.Kuka.Stack.Client<br/>KrcClient, KrcConnectionPool"]
+        Safan_Client["Sistec.Safan.Stack.Client<br/>SafanClient"]
+        Plc_Client["Sistec.PLC.Stack.Client<br/>OpcUaClientCollection"]
+        Sinu_Client["Sistec.Sinumerik.Stack.Client<br/>CNC OPC UA wrapper"]
+        Esa_Client["Sistec.Esa.Stack.Client<br/>EsaModbusClient"]
+    end
+
+    Tcp ---> Kuka_Client
+    Tcp ---> Safan_Client
+    Opc ---> Plc_Client
+    Opc ---> Sinu_Client
+    Opc -..->|opzionale| Kuka_Client
+    Mod ---> Esa_Client
+
+    style Orizzontali fill:#e0f7fa,stroke:#006064,stroke-dasharray: 5 5
+```
+
+**Cosa contengono le librerie orizzontali:**
+
+| Libreria | Contenuto | NON contiene |
+|---|---|---|
+| `Sistec.Tcp.Library` | `ISocketClient`, `ReconnectPolicy`, `MessageFramer`, `ArrayPool<T>` helper, connection pool | Logica KRC, comandi Safan, stato robot |
+| `Sistec.Modbus.Library` | `IModbusClient`, `ModbusReadRequest/WriteRequest`, `IModbusServer` (per simulatore) | Logica pressa ESA, registri specifici ESA |
+| `Sistec.OpcUa.Library` | `UAClient`, session management, certificati X.509, `MonitoredItem`, subscription lifecycle | Tag PLC, DUT, logica watchdog, strategia di registrazione |
+
+**Cosa contengono i Client verticali (esempi):**
+
+| Stack | Client | Logica device-specifica |
+|---|---|---|
+| KUKA | `Sistec.Kuka.Stack.Client` | Protocollo KRC (header/checksum/payload), polling comandi, KrcConnectionPool |
+| Safan | `Sistec.Safan.Stack.Client` | Protocollo Safan, comandi pressa, gestione errori Safan |
+| PLC | `Sistec.PLC.Stack.Client` | `OpcUaClientCollection`, strategia di registrazione tag, autodiscovery PLC |
+| Sinumerik | `Sistec.Sinumerik.Stack.Client` | Wrapper OPC UA per CNC Siemens ONE, nodi CNC specifici |
+| ESA | `Sistec.Esa.Stack.Client` | Mappatura registri Modbus ESA, comandi pressa ESA |
+
+**Regola pratica:** se un pezzo di codice parla il protocollo (TCP framing, OPC UA session, Modbus PDU) → sta nella libreria orizzontale. Se parla con un dispositivo specifico (comando KUKA, registro ESA, nodo CNC) → sta nel Client verticale.
+
+### 2.5 Stack KUKA — Dettaglio (Esempio Completo)
 
 | Layer | Progetto | Contenuto | Dipende da |
 |---|---|---|---|
-| **Client** | `Sistec.Kuka.Stack.Client` | `KrcClient`, `KrcConnectionPool`, protocollo TCP KRC | — |
+| **Client** | `Sistec.Kuka.Stack.Client` | `KrcClient`, `KrcConnectionPool`, protocollo TCP KRC | `Sistec.Tcp.Library` (socket pool, reconnect) |
 | **Driver** | `Sistec.Kuka.Stack.Driver` | `IKukaTagProvider`, `KukaTagValue<T>`, mappatura tag → nomi KUKA | `Sistec.Kuka.Stack.Client`, `Sistec.Core` |
 | **Services** | `Sistec.Kuka.Stack.Services` | `KukaRobotLogic`, `RobotFollowService`, `CommandService`, `OverrideService` | `Sistec.Kuka.Stack.Driver`, `Sistec.Core` |
 | **UI** | `Sistec.Kuka.Stack.UI` | `ucKukaInfo`, `KukaOverrideControl`, `ConnectionStatusControl` | `Sistec.Kuka.Stack.Services`, `Sistec.Controls` |
 | **Simulator** | `Sistec.Kuka.Stack.Simulator` | Server KRC falso (WinForms/Console) | `Sistec.Kuka.Stack.Client` |
 
-### 2.5 Stack Safan (LAG) — Dettaglio
+### 2.6 Stack Safan (LAG) — Dettaglio
 
 | Layer | Progetto | Contenuto | Dipende da |
 |---|---|---|---|
-| **Client** | `Sistec.Safan.Stack.Client` | `SafanClient` (TCP Winsock), `ISafanClient` | — |
+| **Client** | `Sistec.Safan.Stack.Client` | `SafanClient` (TCP Winsock), `ISafanClient` | `Sistec.Tcp.Library` (socket pool, reconnect) |
 | **Driver** | `Sistec.Safan.Stack.Driver` | `ISafanPressBrakeLogic` (migliorato), mappatura comandi Safan | `Sistec.Safan.Stack.Client`, `Sistec.Core` |
 | **Services** | `Sistec.Safan.Stack.Services` | `SafanPressBrakeLogic` (business logic pura), `BendingStatusService` | `Sistec.Safan.Stack.Driver`, `Sistec.Core` |
 | **UI** | `Sistec.Safan.Stack.UI` | `SafanBrakeView`, `BendCycleMonitor` | `Sistec.Safan.Stack.Services`, `Sistec.Controls` |
 | **Simulator** | `Sistec.Safan.Stack.Simulator` | `SafanPressSimulator` (esistente, da restructure) | `Sistec.Safan.Stack.Client` |
 
-### 2.6 Stack ESA (FAEL) — Dettaglio
+### 2.7 Stack ESA (FAEL) — Dettaglio
 
 | Layer | Progetto | Contenuto | Dipende da |
 |---|---|---|---|
@@ -323,7 +475,7 @@ flowchart TB
 | **UI** | `Sistec.Esa.Stack.UI` | `PressBrakeView`, `ProgramSelectionControl`, `PressConfigDialog` | `Sistec.Esa.Stack.Services`, `Sistec.Controls` |
 | **Simulator** | `Sistec.Esa.Stack.Simulator` | Server Modbus falso (ESA-compatible) | `Sistec.Esa.Stack.Client` |
 
-### 2.7 Stack PLC — Dettaglio
+### 2.8 Stack PLC — Dettaglio
 
 | Layer | Progetto | Contenuto | Dipende da |
 |---|---|---|---|
@@ -333,7 +485,7 @@ flowchart TB
 | **UI** | `Sistec.PLC.Stack.UI` | `PlcStatusControl`, `WatchdogIndicator`, `ModeSelector`, viste sensori | `Sistec.PLC.Stack.Services`, `Sistec.Controls` |
 | **Simulator** | `Sistec.PLC.Stack.Simulator` | `FakeOpcUa`, server OPC UA falso (CODESYS emulation) | `Sistec.PLC.Stack.Client` |
 
-### 2.8 Stack Sinumerik (LAG) — Dettaglio
+### 2.9 Stack Sinumerik (LAG) — Dettaglio
 
 | Layer | Progetto | Contenuto | Dipende da |
 |---|---|---|---|
@@ -343,7 +495,7 @@ flowchart TB
 | **UI** | `Sistec.Sinumerik.Stack.UI` | `PunchingProgramView`, `SinumerikStatusControl` | `Sistec.Sinumerik.Stack.Services`, `Sistec.Controls` |
 | **Simulator** | `Sistec.Sinumerik.Stack.Simulator` | `LagNx1525Simulation` (esistente, da restructure) | `Sistec.Sinumerik.Stack.Client` |
 
-### 2.9 Stack Produzione / Job Management — Dettaglio
+### 2.10 Stack Produzione / Job Management — Dettaglio
 
 | Layer | Progetto | Contenuto | Dipende da |
 |---|---|---|---|
@@ -352,7 +504,7 @@ flowchart TB
 | **Services** | `Sistec.JobManagement.Stack.Services` | `JobManager`, `ProgramLogic`, `TrackerService` | `Sistec.Core`, `Sistec.Infra.Persistence` |
 | **UI** | `Sistec.JobManagement.Stack.UI` | `JobDialog`, `ProgramSelectionView` | `Sistec.JobManagement.Stack.Services`, `Sistec.Controls` |
 
-### 2.10 Grafo Dipendenze (Unificato)
+### 2.11 Grafo Dipendenze (Unificato)
 
 ```mermaid
 flowchart LR
@@ -446,7 +598,7 @@ flowchart LR
     class Config,Pers,CodeGen infra
 ```
 
-### 2.11 Code Generation per DUT
+### 2.12 Code Generation per DUT
 
 I file DUT (tag mapping OPC UA) sono attualmente **scritti a mano** in entrambe le codebase con commenti `//order matters: use the same order used in the codesys structure` — estremamente fragili e fonte di bug.
 
@@ -468,7 +620,7 @@ flowchart LR
 - Tag type-safe (non più `"Main_ProductionValid"` ma `TagConstants.Main.ProductionValid`)
 - POCO puri separati da `EncodeableBase` — rompe il technology lock-in OPC UA
 
-### 2.12 Gestione Varianti HMI (Problema Aperto)
+### 2.13 Gestione Varianti HMI (Problema Aperto)
 
 FAEL presenta 3 varianti (AB, C, BS) con ~45-55% di codice duplicato. LAG ha una singola variante.
 
@@ -479,7 +631,7 @@ FAEL presenta 3 varianti (AB, C, BS) con ~45-55% di codice duplicato. LAG ha una
 
 **Raccomandazione preliminare:** Iniziare comunque con la creazione degli stack verticali (Fase 1-2). La gestione varianti può essere affrontata in Fase 3 quando gli stack saranno stabili e le differenze tra varianti saranno più visibili.
 
-### 2.13 Pattern di Composizione: DI Container
+### 2.14 Pattern di Composizione: DI Container
 
 ```csharp
 // Program.cs — Composition Root unificato
@@ -525,7 +677,7 @@ public static IServiceCollection AddKukaStack(this IServiceCollection services)
 }
 ```
 
-### 2.14 Strategia di Test Unificata
+### 2.15 Strategia di Test Unificata
 
 | Layer | Tipo Test | Framework | Tool |
 |---|---|---|---|
@@ -538,7 +690,7 @@ public static IServiceCollection AddKukaStack(this IServiceCollection services)
 
 **Standard:** NUnit 4.3.2 (già presente in LAG per Safan su net10.0) come framework unico per tutti i test automatici. `coverlet.collector` per code coverage. Ogni stack ha il suo progetto di test.
 
-### 2.15 Design Pattern Applicati
+### 2.16 Design Pattern Applicati
 
 L'architettura target adotta esplicitamente i seguenti pattern creazionali e strutturali nei layer indicati:
 
@@ -4405,9 +4557,9 @@ app.MapGet("/api/v1/alarms", async (IAlarmService alarms) =>
 
 ---
 
-### 19.3 Feature Flags per le Varianti HMI (Soluzione a §2.12)
+### 19.3 Feature Flags per le Varianti HMI (Soluzione a §2.13)
 
-Il problema aperto di §2.12 (gestione varianti AB/C/BS) è oggi risolto con **progetti .csproj separati e if/else** su `CellType`. FAEL ha `PalletLogic_AB.cs` vs `PalletLogic_C.cs` (in `Common/Logic/`), codici pressa diversi, logiche di produzione differenti.
+Il problema aperto di §2.13 (gestione varianti AB/C/BS) è oggi risolto con **progetti .csproj separati e if/else** su `CellType`. FAEL ha `PalletLogic_AB.cs` vs `PalletLogic_C.cs` (in `Common/Logic/`), codici pressa diversi, logiche di produzione differenti.
 
 **Proposta:** `Microsoft.FeatureManagement` o un `IFeatureFlagService` custom:
 
@@ -4921,7 +5073,7 @@ Il confine è netto: **l'HMI comanda, la dashboard osserva**. Questo garantisce 
 |---|---|---|---|
 | Health Checks + Circuit Breaker | Fase 2 (ogni stack) | 2-3gg/stack | Alta |
 | REST API MES/ERP | Fase 3 (applicativi) | 1-2 settimane | Media |
-| Feature Flags | Fase 1 (fondazioni) | 3-5gg | Alta (risolve §2.12) |
+| Feature Flags | Fase 1 (fondazioni) | 3-5gg | Alta (risolve §2.13) |
 | Config Hot-Reload | Fase 1 (fondazioni) | 2-3gg | Alta |
 | Metrics + Tracing | Fase 3 (applicativi) | 1-2 settimane | Media |
 | Async Audit | Fase 0 (prerequisito) | 2-3gg | Alta (bug latente) |

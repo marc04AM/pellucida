@@ -6,7 +6,7 @@ This workspace is a **documentation-only repository** containing architecture an
 
 | File | Purpose | Lines |
 |---|---|---|
-| `analisi-unificata.md` | Main architecture document: unified analysis of LAG (5315) and FAEL (5309) codebases + greenfield blueprint for next commessa. | ~4030, 19 sections |
+| `analisi-unificata.md` | Main architecture document: unified analysis of LAG (5315) and FAEL (5309) codebases + greenfield blueprint for next commessa. | ~6892, 26 sections (24 numbered + 2 intro) |
 | `proposta-adozione-ansible.md` | Ansible adoption proposal for industrial PC deployment automation. | ~600 |
 
 ## Key Facts for Future Sessions
@@ -15,6 +15,17 @@ This workspace is a **documentation-only repository** containing architecture an
 - **Target stack**: Sistec.\<Nome>.Stack.* (5 layers: Client → Driver → Services → UI → Simulator), NuGet packages, DI container (MS.Extensions.DI), Avalonia UI, NUnit tests.
 - **Dependencies to read**: `C:\Users\Sistec 32\.claude\CLAUDE.md` defines the `/graphify` skill.
 - **Workspace**: `C:\Users\Sistec 32\Desktop\tmp\` — two .md files only. No CI config, no package manifests, no build scripts.
+
+## HTML Conversion (`converti_html.py`)
+
+| Aspect | Detail |
+|---|---|
+| **Output** | `analisi-unificata.html` (~419 KB, 26 pages, 35 Mermaid diagrams) |
+| **Mermaid CDN** | `cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js` |
+| **Known syntax fixes applied** | `&lt;/&gt;` → `<`/`>`, `optional` stripped from gantt tasks, `|"..."|` → `|...|` in arrow labels |
+| **Highlight.js** | cdnjs v11.11.0, languages: csharp/json/xml/yaml/sql/javascript/markdown/ini |
+| **Maximize/zoom** | Each Mermaid div gets hover button → modal with pan (drag) + zoom (scroll wheel) |
+| **Other features** | Sidebar navigation, keyboard arrows, progress bar, code labels |
 
 ## Reference Codebases
 
