@@ -1,6 +1,6 @@
-# AGENTS.md — Sistec HMI Architecture Workspace
+# AGENTS.md — Progetto Pellucida
 
-This workspace is a **documentation-only repository** containing architecture analysis for Sistec HMI industrial software. No code, build system, CI/CD, or tests live here.
+this workspace is **Progetto Pellucida** (ref: stella che collassa in buco nero ne *Il pianeta del tesoro*). Documentation-only repo: architecture analysis for Sistec HMI industrial software. No code, build system, CI/CD, or tests.
 
 ## Files
 
@@ -12,7 +12,7 @@ This workspace is a **documentation-only repository** containing architecture an
 ## Key Facts for Future Sessions
 
 - **Strategic decision**: legacy LAG/FAEL will NOT be refactored. The architecture document is a blueprint for the **next greenfield commessa**.
-- **Target stack**: Sistec.\<Nome>.Stack.* (5 layers: Client → Driver → Services → UI → Simulator), NuGet packages, DI container (MS.Extensions.DI), Avalonia UI, NUnit tests.
+- **Target stack**: `Sistec.Stack.<Nome>.*` (5 layers: Client → Driver → Services → UI → Simulator), `Sistec.Library.*` (horizontal shared libs: Tcp, OpcUa, Modbus), NuGet packages, DI container (MS.Extensions.DI), Avalonia UI, NUnit tests.
 - **Dependencies to read**: `C:\Users\Sistec 32\.claude\CLAUDE.md` defines the `/graphify` skill.
 - **Workspace**: `C:\Users\Sistec 32\Desktop\tmp\` — two .md files only. No CI config, no package manifests, no build scripts.
 
@@ -31,8 +31,8 @@ This workspace is a **documentation-only repository** containing architecture an
 
 | Codebase | Path | Scope |
 |---|---|---|
-| **5315 LAG** | `D:\DEV\5315_LAG` | 14 projects, pressa Safan (TCP), robot KUKA, CNC Sinumerik/ONE |
-| **5309 FAEL** | `D:\DEV\5309_FAEL` | 53 projects, 3 varianti HMI (AB, C, BS), pressa ESA (Modbus), robot KUKA, bus Zebus |
+| **5315 LAG** | `\..\5315_LAG` | 14 projects, pressa Safan (TCP), robot KUKA, CNC Sinumerik/ONE |
+| **5309 FAEL** | `\..\5309_FAEL` | 53 projects, 3 varianti HMI (AB, C, BS), pressa ESA (Modbus), robot KUKA, bus Zebus |
 
 Both are **read-only references** for architecture analysis. Never modify them.
 

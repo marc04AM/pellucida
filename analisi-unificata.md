@@ -218,25 +218,25 @@ La libreria `Sistec.Opc.Ua` è il wrapper attorno all'OPC Foundation SDK (v1.5.3
 | `[Obsolete]` su `Subscribe` | ❌ No | ✅ Sì | FAEL |
 | `OpcUaTagValue<T>` | 422 righe, `Monitor.TryEnter` + sync-over-async | 199 righe, snello | FAEL |
 
-**Conclusione:** FAEL ha ricevuto bugfix sostanziali che LAG non ha. La versione FAEL è la **baseline consigliata** per il nuovo `Sistec.PLC.Stack`.
+**Conclusione:** FAEL ha ricevuto bugfix sostanziali che LAG non ha. La versione FAEL è la **baseline consigliata** per il nuovo `Sistec.Stack.PLC`.
 
 #### Impatto sull'Architettura Target
 
-**Attenzione — principio chiave:** `Sistec.OpcUa.Library` è una libreria **orizzontale**, NON una libreria verticale del solo PLC. Può essere usata da PIÙ stack (PLC, Sinumerik, e potenzialmente robot KUKA se via OPC UA). Non va duplicata. Lo stesso vale per `Sistec.Modbus.Library` e `Sistec.Tcp.Library`.
+**Attenzione — principio chiave:** `Sistec.Library.OpcUa` è una libreria **orizzontale**, NON una libreria verticale del solo PLC. Può essere usata da PIÙ stack (PLC, Sinumerik, e potenzialmente robot KUKA se via OPC UA). Non va duplicata. Lo stesso vale per `Sistec.Library.Modbus` e `Sistec.Library.Tcp`.
 
 Nell'architettura a stack verticali (§2), `Sistec.Opc.Ua` si decompone in:
 
 | Progetto | Tipo | Ruolo | Ereditato da |
 |---|---|---|---|
-| `Sistec.OpcUa.Library` | **Orizzontale** (condivisa) | `UAClient`, session management, certificati, subscription lifecycle — protocollo OPC UA puro, zero logica di dominio | `UAClient.cs` (buono), `OpcUaClient.cs` (solo parte connection/session) |
-| `Sistec.PLC.Stack.Client` | Verticale (solo PLC) | `OpcUaClientCollection`, strategia di registrazione tag PLC, autodiscovery — costruito SOPRA `Sistec.OpcUa.Library` | `OpcUaClientCollection.cs` (da rifare senza busy-wait) |
-| `Sistec.PLC.Stack.Driver` | Verticale | `IPlcTagProvider`, `OpcUaTagFactory`, tag DUT (da codegen) | `OpcUaTagValue.cs` (FAEL), `OpcUaTagFactory.cs` |
-| `Sistec.PLC.Stack.Services` | Verticale | `PlcConnectionService`, `WatchdogService`, `ModeService` | Da scrivere |
-| `Sistec.PLC.Stack.UI` | Verticale | `PlcStatusControl`, `WatchdogIndicator` | Da scrivere |
-| `Sistec.PLC.Stack.Simulator` | Verticale | `FakeOpcUa` unico (non 13 copie) | Da scrivere |
-| `Sistec.Sinumerik.Stack.Client` | Verticale (solo CNC) | Wrapper OPC UA per CNC Siemens ONE — costruito SOPRA `Sistec.OpcUa.Library` | Da scrivere |
+| `Sistec.Library.OpcUa` | **Orizzontale** (condivisa) | `UAClient`, session management, certificati, subscription lifecycle — protocollo OPC UA puro, zero logica di dominio | `UAClient.cs` (buono), `OpcUaClient.cs` (solo parte connection/session) |
+| `Sistec.Stack.PLC.Client` | Verticale (solo PLC) | `OpcUaClientCollection`, strategia di registrazione tag PLC, autodiscovery — costruito SOPRA `Sistec.Library.OpcUa` | `OpcUaClientCollection.cs` (da rifare senza busy-wait) |
+| `Sistec.Stack.PLC.Driver` | Verticale | `IPlcTagProvider`, `OpcUaTagFactory`, tag DUT (da codegen) | `OpcUaTagValue.cs` (FAEL), `OpcUaTagFactory.cs` |
+| `Sistec.Stack.PLC.Services` | Verticale | `PlcConnectionService`, `WatchdogService`, `ModeService` | Da scrivere |
+| `Sistec.Stack.PLC.UI` | Verticale | `PlcStatusControl`, `WatchdogIndicator` | Da scrivere |
+| `Sistec.Stack.PLC.Simulator` | Verticale | `FakeOpcUa` unico (non 13 copie) | Da scrivere |
+| `Sistec.Stack.Sinumerik.Client` | Verticale (solo CNC) | Wrapper OPC UA per CNC Siemens ONE — costruito SOPRA `Sistec.Library.OpcUa` | Da scrivere |
 
-**Regola:** Se un domani KUKA dovesse supportare OPC UA, `Sistec.Kuka.Stack.Client` dipenderà da `Sistec.OpcUa.Library` — senza duplicare nulla.
+**Regola:** Se un domani KUKA dovesse supportare OPC UA, `Sistec.Stack.Kuka.Client` dipenderà da `Sistec.Library.OpcUa` — senza duplicare nulla.
 
 La logica di connessione, certificati, riconnessione va mantenuta ma con:
 - `IDisposable` pattern standard
@@ -257,7 +257,7 @@ La logica di connessione, certificati, riconnessione va mantenuta ma con:
 | **Dependency Inversion** | Tutto dipende da interfacce, mai da classi concrete |
 | **DI Container** | `Microsoft.Extensions.DependencyInjection` per composizione e lifetime |
 | **Sep. Responsabilità** | Ogni progetto ha UN solo scopo. **5 layer per stack** |
-| **Coesione** | Tutto KUKA in `Sistec.Kuka.Stack.*` |
+| **Coesione** | Tutto KUKA in `Sistec.Stack.Kuka.*` |
 | **Anti-Corruption Layer** | Ogni stack traduce dal protocollo nativo al dominio |
 | **Configurabilità** | `IOptions<T>` invece di Configuration statica |
 | **Code Generation** | DUT generati da definizioni CODESYS |
@@ -275,7 +275,7 @@ flowchart TB
         DEP_SOLID["● ──→ Dipende da layer interno<br/>dello stesso stack"]
     end
 
-    subgraph Stack["Sistec.<Nome>.Stack (es. Sistec.Kuka.Stack)"]
+    subgraph Stack["Sistec.<Nome>.Stack (es. Sistec.Stack.Kuka)"]
         direction TB
         UI["Sistec.<Nome>.Stack.UI<br/>UserControls, Pages<br/>WinForms view layer"]
         SVC["Sistec.<Nome>.Stack.Services<br/>Orchestrators, Use Cases<br/>Logica applicativa"]
@@ -285,9 +285,9 @@ flowchart TB
     end
 
     subgraph Horizontal["LIBRERIE ORIZZONTALI<br/>(condivise, MAI duplicate)"]
-        TcpLib["Sistec.Tcp.Library<br/>Socket pool, reconnect,<br/>message framing"]
-        ModbusLib["Sistec.Modbus.Library<br/>Client/Server Modbus TCP"]
-        OpcUaLib["Sistec.OpcUa.Library<br/>UAClient, Session,<br/>MonitoredItem"]
+        TcpLib["Sistec.Library.Tcp<br/>Socket pool, reconnect,<br/>message framing"]
+        ModbusLib["Sistec.Library.Modbus<br/>Client/Server Modbus TCP"]
+        OpcUaLib["Sistec.Library.OpcUa<br/>UAClient, Session,<br/>MonitoredItem"]
     end
 
     UI --> SVC
@@ -301,7 +301,9 @@ flowchart TB
     style Horizontal fill:#e0f7fa,stroke:#006064,stroke-dasharray: 5 5
 ```
 
-**NB:** Il layer `Client` di ogni stack NON reimplementa il protocollo — usa le librerie orizzontali `Sistec.Tcp.Library`, `Sistec.Modbus.Library`, `Sistec.OpcUa.Library`. Queste sono **un'istanza unica, condivisa tra tutti gli stack che ne hanno bisogno** (es. `Sistec.OpcUa.Library` è usata da PLC e Sinumerik, e opzionalmente da KUKA).
+**NB:** Il layer `Client` di ogni stack NON reimplementa il protocollo — usa le librerie orizzontali `Sistec.Library.Tcp`, `Sistec.Library.Modbus`, `Sistec.Library.OpcUa`. Queste sono **un'istanza unica, condivisa tra tutti gli stack che ne hanno bisogno** (es. `Sistec.Library.OpcUa` è usata da PLC e Sinumerik, e opzionalmente da KUKA).
+
+`Sistec.Library.Redis` è la libreria trasversale per stato condiviso veloce — usata da tutti gli stack che necessitano hot data (sessioni, allarmi, pallet, contatori, metriche). Opzionale: se Redis non è configurato, i servizi degradano graceful su MySQL (§19.13).
 
 ### 2.3 Mappa degli Stack
 
@@ -314,25 +316,26 @@ flowchart TB
     end
 
     subgraph Comunicazione["LIBRERIE ORIZZONTALI (condivise, MAI duplicate per stack)"]
-        TcpLib["Sistec.Tcp.Library<br/>Socket pool, reconnect<br/>message framing<br/>(usata da KUKA, Safan)"]
-        OpcUaLib["Sistec.OpcUa.Library<br/>UAClient, Session,<br/>MonitoredItem<br/>(usata da PLC, Sinumerik,<br/>opzionalmente KUKA)"]
-        ModbusLib["Sistec.Modbus.Library<br/>EasyModbus puro<br/>Client/Server Modbus TCP<br/>(usata da ESA)"]
-        BusLib["Sistec.Bus.Library<br/>Zebus pub/sub o HTTP+Redis<br/>Comunicazione inter-pannello"]
+        TcpLib["Sistec.Library.Tcp<br/>Socket pool, reconnect<br/>message framing<br/>(usata da KUKA, Safan)"]
+        OpcUaLib["Sistec.Library.OpcUa<br/>UAClient, Session,<br/>MonitoredItem<br/>(usata da PLC, Sinumerik,<br/>opzionalmente KUKA)"]
+        ModbusLib["Sistec.Library.Modbus<br/>EasyModbus puro<br/>Client/Server Modbus TCP<br/>(usata da ESA)"]
+        BusLib["Sistec.Library.Bus<br/>Zebus pub/sub o HTTP+Redis<br/>Comunicazione inter-pannello"]
+        RedisLib["Sistec.Library.Redis<br/>Hot data layer trasversale<br/>Sessioni, Allarmi, Pallet,<br/>Traduzioni, Metriche<br/>(opzionale)"]
     end
 
     subgraph Macchine["STACK VERTICALI — MACCHINE"]
-        Kuka["Sistec.Kuka.Stack<br/>Robot KUKA KRC<br/>Client · Driver · Services · UI · Simulator"]
-        Safan["Sistec.Safan.Stack<br/>Pressa Safan (TCP)<br/>Client · Driver · Services · UI · Simulator"]
-        Esa["Sistec.Esa.Stack<br/>Pressa ESA (Modbus)<br/>Client · Driver · Services · UI · Simulator"]
-        PlcInt["Sistec.PLC.Stack<br/>Interfaccia PLC (OPC UA)<br/>Client · Driver · Services · UI · Simulator"]
-        Sinumerik["Sistec.Sinumerik.Stack<br/>CNC Siemens ONE<br/>Client · Driver · Services · UI · Simulator"]
+        Kuka["Sistec.Stack.Kuka<br/>Robot KUKA KRC<br/>Client · Driver · Services · UI · Simulator"]
+        Safan["Sistec.Stack.Safan<br/>Pressa Safan (TCP)<br/>Client · Driver · Services · UI · Simulator"]
+        Esa["Sistec.Stack.Esa<br/>Pressa ESA (Modbus)<br/>Client · Driver · Services · UI · Simulator"]
+        PlcInt["Sistec.Stack.PLC<br/>Interfaccia PLC (OPC UA)<br/>Client · Driver · Services · UI · Simulator"]
+        Sinumerik["Sistec.Stack.Sinumerik<br/>CNC Siemens ONE<br/>Client · Driver · Services · UI · Simulator"]
     end
 
     subgraph Applicazione["STACK VERTICALI — APPLICAZIONE"]
-        Production["Sistec.Production.Stack<br/>Orchestrazione produzione<br/>Services + UI"]
-        JobMgmt["Sistec.JobManagement.Stack<br/>Job lifecycle, tracking<br/>Services + UI"]
-        Maintenance["Sistec.Maintenance.Stack<br/>Manutenzione, safety<br/>Services + UI"]
-        Alarms["Sistec.Alarms.Stack<br/>Alarm journal, notifiche<br/>Services + UI"]
+        Production["Sistec.Stack.Production<br/>Orchestrazione produzione<br/>Services + UI"]
+        JobMgmt["Sistec.Stack.JobManagement<br/>Job lifecycle, tracking<br/>Services + UI"]
+        Maintenance["Sistec.Stack.Maintenance<br/>Manutenzione, safety<br/>Services + UI"]
+        Alarms["Sistec.Stack.Alarms<br/>Alarm journal, notifiche<br/>Services + UI"]
     end
 
     subgraph Persistence["PERSISTENZA (multi-progetto)"]
@@ -397,22 +400,22 @@ flowchart TB
 
 ### 2.4 Librerie Orizzontali: Principio di Non Duplicazione
 
-Le librerie orizzontali (`Sistec.Tcp.Library`, `Sistec.Modbus.Library`, `Sistec.OpcUa.Library`) sono **un'unica istanza condivisa tra tutti gli stack**. Non vanno mai replicate:
+Le librerie orizzontali (`Sistec.Library.Tcp`, `Sistec.Library.Modbus`, `Sistec.Library.OpcUa`) sono **un'unica istanza condivisa tra tutti gli stack**. Non vanno mai replicate:
 
 ```mermaid
 flowchart LR
     subgraph Orizzontali["LIBRERIE ORIZZONTALI — UNA SOLA COPIA"]
-        Tcp["Sistec.Tcp.Library"]
-        Opc["Sistec.OpcUa.Library"]
-        Mod["Sistec.Modbus.Library"]
+        Tcp["Sistec.Library.Tcp"]
+        Opc["Sistec.Library.OpcUa"]
+        Mod["Sistec.Library.Modbus"]
     end
 
     subgraph Stacks["STACK CHE LE USANO"]
-        Kuka_Client["Sistec.Kuka.Stack.Client<br/>KrcClient, KrcConnectionPool"]
-        Safan_Client["Sistec.Safan.Stack.Client<br/>SafanClient"]
-        Plc_Client["Sistec.PLC.Stack.Client<br/>OpcUaClientCollection"]
-        Sinu_Client["Sistec.Sinumerik.Stack.Client<br/>CNC OPC UA wrapper"]
-        Esa_Client["Sistec.Esa.Stack.Client<br/>EsaModbusClient"]
+        Kuka_Client["Sistec.Stack.Kuka.Client<br/>KrcClient, KrcConnectionPool"]
+        Safan_Client["Sistec.Stack.Safan.Client<br/>SafanClient"]
+        Plc_Client["Sistec.Stack.PLC.Client<br/>OpcUaClientCollection"]
+        Sinu_Client["Sistec.Stack.Sinumerik.Client<br/>CNC OPC UA wrapper"]
+        Esa_Client["Sistec.Stack.Esa.Client<br/>EsaModbusClient"]
     end
 
     Tcp ---> Kuka_Client
@@ -429,19 +432,19 @@ flowchart LR
 
 | Libreria | Contenuto | NON contiene |
 |---|---|---|
-| `Sistec.Tcp.Library` | `ISocketClient`, `ReconnectPolicy`, `MessageFramer`, `ArrayPool<T>` helper, connection pool | Logica KRC, comandi Safan, stato robot |
-| `Sistec.Modbus.Library` | `IModbusClient`, `ModbusReadRequest/WriteRequest`, `IModbusServer` (per simulatore) | Logica pressa ESA, registri specifici ESA |
-| `Sistec.OpcUa.Library` | `UAClient`, session management, certificati X.509, `MonitoredItem`, subscription lifecycle | Tag PLC, DUT, logica watchdog, strategia di registrazione |
+| `Sistec.Library.Tcp` | `ISocketClient`, `ReconnectPolicy`, `MessageFramer`, `ArrayPool<T>` helper, connection pool | Logica KRC, comandi Safan, stato robot |
+| `Sistec.Library.Modbus` | `IModbusClient`, `ModbusReadRequest/WriteRequest`, `IModbusServer` (per simulatore) | Logica pressa ESA, registri specifici ESA |
+| `Sistec.Library.OpcUa` | `UAClient`, session management, certificati X.509, `MonitoredItem`, subscription lifecycle | Tag PLC, DUT, logica watchdog, strategia di registrazione |
 
 **Cosa contengono i Client verticali (esempi):**
 
 | Stack | Client | Logica device-specifica |
 |---|---|---|
-| KUKA | `Sistec.Kuka.Stack.Client` | Protocollo KRC (header/checksum/payload), polling comandi, KrcConnectionPool |
-| Safan | `Sistec.Safan.Stack.Client` | Protocollo Safan, comandi pressa, gestione errori Safan |
-| PLC | `Sistec.PLC.Stack.Client` | `OpcUaClientCollection`, strategia di registrazione tag, autodiscovery PLC |
-| Sinumerik | `Sistec.Sinumerik.Stack.Client` | Wrapper OPC UA per CNC Siemens ONE, nodi CNC specifici |
-| ESA | `Sistec.Esa.Stack.Client` | Mappatura registri Modbus ESA, comandi pressa ESA |
+| KUKA | `Sistec.Stack.Kuka.Client` | Protocollo KRC (header/checksum/payload), polling comandi, KrcConnectionPool |
+| Safan | `Sistec.Stack.Safan.Client` | Protocollo Safan, comandi pressa, gestione errori Safan |
+| PLC | `Sistec.Stack.PLC.Client` | `OpcUaClientCollection`, strategia di registrazione tag, autodiscovery PLC |
+| Sinumerik | `Sistec.Stack.Sinumerik.Client` | Wrapper OPC UA per CNC Siemens ONE, nodi CNC specifici |
+| ESA | `Sistec.Stack.Esa.Client` | Mappatura registri Modbus ESA, comandi pressa ESA |
 
 **Regola pratica:** se un pezzo di codice parla il protocollo (TCP framing, OPC UA session, Modbus PDU) → sta nella libreria orizzontale. Se parla con un dispositivo specifico (comando KUKA, registro ESA, nodo CNC) → sta nel Client verticale.
 
@@ -449,60 +452,60 @@ flowchart LR
 
 | Layer | Progetto | Contenuto | Dipende da |
 |---|---|---|---|
-| **Client** | `Sistec.Kuka.Stack.Client` | `KrcClient`, `KrcConnectionPool`, protocollo TCP KRC | `Sistec.Tcp.Library` (socket pool, reconnect) |
-| **Driver** | `Sistec.Kuka.Stack.Driver` | `IKukaTagProvider`, `KukaTagValue<T>`, mappatura tag → nomi KUKA | `Sistec.Kuka.Stack.Client`, `Sistec.Core` |
-| **Services** | `Sistec.Kuka.Stack.Services` | `KukaRobotLogic`, `RobotFollowService`, `CommandService`, `OverrideService` | `Sistec.Kuka.Stack.Driver`, `Sistec.Core` |
-| **UI** | `Sistec.Kuka.Stack.UI` | `ucKukaInfo`, `KukaOverrideControl`, `ConnectionStatusControl` | `Sistec.Kuka.Stack.Services`, `Sistec.Controls` |
-| **Simulator** | `Sistec.Kuka.Stack.Simulator` | Server KRC falso (WinForms/Console) | `Sistec.Kuka.Stack.Client` |
+| **Client** | `Sistec.Stack.Kuka.Client` | `KrcClient`, `KrcConnectionPool`, protocollo TCP KRC | `Sistec.Library.Tcp` (socket pool, reconnect) |
+| **Driver** | `Sistec.Stack.Kuka.Driver` | `IKukaTagProvider`, `KukaTagValue<T>`, mappatura tag → nomi KUKA | `Sistec.Stack.Kuka.Client`, `Sistec.Core` |
+| **Services** | `Sistec.Stack.Kuka.Services` | `KukaRobotLogic`, `RobotFollowService`, `CommandService`, `OverrideService` | `Sistec.Stack.Kuka.Driver`, `Sistec.Core` |
+| **UI** | `Sistec.Stack.Kuka.UI` | `ucKukaInfo`, `KukaOverrideControl`, `ConnectionStatusControl` | `Sistec.Stack.Kuka.Services`, `Sistec.Controls` |
+| **Simulator** | `Sistec.Stack.Kuka.Simulator` | Server KRC falso (WinForms/Console) | `Sistec.Stack.Kuka.Client` |
 
 ### 2.6 Stack Safan (LAG) — Dettaglio
 
 | Layer | Progetto | Contenuto | Dipende da |
 |---|---|---|---|
-| **Client** | `Sistec.Safan.Stack.Client` | `SafanClient` (TCP Winsock), `ISafanClient` | `Sistec.Tcp.Library` (socket pool, reconnect) |
-| **Driver** | `Sistec.Safan.Stack.Driver` | `ISafanPressBrakeLogic` (migliorato), mappatura comandi Safan | `Sistec.Safan.Stack.Client`, `Sistec.Core` |
-| **Services** | `Sistec.Safan.Stack.Services` | `SafanPressBrakeLogic` (business logic pura), `BendingStatusService` | `Sistec.Safan.Stack.Driver`, `Sistec.Core` |
-| **UI** | `Sistec.Safan.Stack.UI` | `SafanBrakeView`, `BendCycleMonitor` | `Sistec.Safan.Stack.Services`, `Sistec.Controls` |
-| **Simulator** | `Sistec.Safan.Stack.Simulator` | `SafanPressSimulator` (esistente, da restructure) | `Sistec.Safan.Stack.Client` |
+| **Client** | `Sistec.Stack.Safan.Client` | `SafanClient` (TCP Winsock), `ISafanClient` | `Sistec.Library.Tcp` (socket pool, reconnect) |
+| **Driver** | `Sistec.Stack.Safan.Driver` | `ISafanPressBrakeLogic` (migliorato), mappatura comandi Safan | `Sistec.Stack.Safan.Client`, `Sistec.Core` |
+| **Services** | `Sistec.Stack.Safan.Services` | `SafanPressBrakeLogic` (business logic pura), `BendingStatusService` | `Sistec.Stack.Safan.Driver`, `Sistec.Core` |
+| **UI** | `Sistec.Stack.Safan.UI` | `SafanBrakeView`, `BendCycleMonitor` | `Sistec.Stack.Safan.Services`, `Sistec.Controls` |
+| **Simulator** | `Sistec.Stack.Safan.Simulator` | `SafanPressSimulator` (esistente, da restructure) | `Sistec.Stack.Safan.Client` |
 
 ### 2.7 Stack ESA (FAEL) — Dettaglio
 
 | Layer | Progetto | Contenuto | Dipende da |
 |---|---|---|---|
-| **Client** | `Sistec.Esa.Stack.Client` | `EsaModbusClient`, protocollo Modbus ESA | `Sistec.Modbus.Library` |
-| **Driver** | `Sistec.Esa.Stack.Driver` | `IPressBrakeTagProvider`, mappatura registri Modbus | `Sistec.Esa.Stack.Client`, `Sistec.Core` |
-| **Services** | `Sistec.Esa.Stack.Services` | `PressOrchestrator`, `BendingProgramService`, `PressStateService` | `Sistec.Esa.Stack.Driver`, `Sistec.Core` |
-| **UI** | `Sistec.Esa.Stack.UI` | `PressBrakeView`, `ProgramSelectionControl`, `PressConfigDialog` | `Sistec.Esa.Stack.Services`, `Sistec.Controls` |
-| **Simulator** | `Sistec.Esa.Stack.Simulator` | Server Modbus falso (ESA-compatible) | `Sistec.Esa.Stack.Client` |
+| **Client** | `Sistec.Stack.Esa.Client` | `EsaModbusClient`, protocollo Modbus ESA | `Sistec.Library.Modbus` |
+| **Driver** | `Sistec.Stack.Esa.Driver` | `IPressBrakeTagProvider`, mappatura registri Modbus | `Sistec.Stack.Esa.Client`, `Sistec.Core` |
+| **Services** | `Sistec.Stack.Esa.Services` | `PressOrchestrator`, `BendingProgramService`, `PressStateService` | `Sistec.Stack.Esa.Driver`, `Sistec.Core` |
+| **UI** | `Sistec.Stack.Esa.UI` | `PressBrakeView`, `ProgramSelectionControl`, `PressConfigDialog` | `Sistec.Stack.Esa.Services`, `Sistec.Controls` |
+| **Simulator** | `Sistec.Stack.Esa.Simulator` | Server Modbus falso (ESA-compatible) | `Sistec.Stack.Esa.Client` |
 
 ### 2.8 Stack PLC — Dettaglio
 
 | Layer | Progetto | Contenuto | Dipende da |
 |---|---|---|---|
-| **Client** | `Sistec.PLC.Stack.Client` | `OpcUaClientCollection`, `IUAClient`, autodiscovery | `Sistec.OpcUa.Library` |
-| **Driver** | `Sistec.PLC.Stack.Driver` | `IPlcTagProvider`, `OpcUaTagFactory`, tag DUT (da codegen) | `Sistec.PLC.Stack.Client`, `Sistec.Core` |
-| **Services** | `Sistec.PLC.Stack.Services` | `PlcConnectionService`, `WatchdogService`, `SheetMonitorService`, `ModeService` | `Sistec.PLC.Stack.Driver`, `Sistec.Core` |
-| **UI** | `Sistec.PLC.Stack.UI` | `PlcStatusControl`, `WatchdogIndicator`, `ModeSelector`, viste sensori | `Sistec.PLC.Stack.Services`, `Sistec.Controls` |
-| **Simulator** | `Sistec.PLC.Stack.Simulator` | `FakeOpcUa`, server OPC UA falso (CODESYS emulation) | `Sistec.PLC.Stack.Client` |
+| **Client** | `Sistec.Stack.PLC.Client` | `OpcUaClientCollection`, `IUAClient`, autodiscovery | `Sistec.Library.OpcUa` |
+| **Driver** | `Sistec.Stack.PLC.Driver` | `IPlcTagProvider`, `OpcUaTagFactory`, tag DUT (da codegen) | `Sistec.Stack.PLC.Client`, `Sistec.Core` |
+| **Services** | `Sistec.Stack.PLC.Services` | `PlcConnectionService`, `WatchdogService`, `SheetMonitorService`, `ModeService` | `Sistec.Stack.PLC.Driver`, `Sistec.Core` |
+| **UI** | `Sistec.Stack.PLC.UI` | `PlcStatusControl`, `WatchdogIndicator`, `ModeSelector`, viste sensori | `Sistec.Stack.PLC.Services`, `Sistec.Controls` |
+| **Simulator** | `Sistec.Stack.PLC.Simulator` | `FakeOpcUa`, server OPC UA falso (CODESYS emulation) | `Sistec.Stack.PLC.Client` |
 
 ### 2.9 Stack Sinumerik (LAG) — Dettaglio
 
 | Layer | Progetto | Contenuto | Dipende da |
 |---|---|---|---|
-| **Client** | `Sistec.Sinumerik.Stack.Client` | Wrapper OPC UA ONE CNC | `Sistec.OpcUa.Library` |
-| **Driver** | `Sistec.Sinumerik.Stack.Driver` | `ISinumerikTagProvider`, mappatura tag CNC | `Sistec.Sinumerik.Stack.Client`, `Sistec.Core` |
-| **Services** | `Sistec.Sinumerik.Stack.Services` | `LagNx1525`, `PunchingProgramService`, `ProgramContentGetter` | `Sistec.Sinumerik.Stack.Driver`, `Sistec.Core` |
-| **UI** | `Sistec.Sinumerik.Stack.UI` | `PunchingProgramView`, `SinumerikStatusControl` | `Sistec.Sinumerik.Stack.Services`, `Sistec.Controls` |
-| **Simulator** | `Sistec.Sinumerik.Stack.Simulator` | `LagNx1525Simulation` (esistente, da restructure) | `Sistec.Sinumerik.Stack.Client` |
+| **Client** | `Sistec.Stack.Sinumerik.Client` | Wrapper OPC UA ONE CNC | `Sistec.Library.OpcUa` |
+| **Driver** | `Sistec.Stack.Sinumerik.Driver` | `ISinumerikTagProvider`, mappatura tag CNC | `Sistec.Stack.Sinumerik.Client`, `Sistec.Core` |
+| **Services** | `Sistec.Stack.Sinumerik.Services` | `LagNx1525`, `PunchingProgramService`, `ProgramContentGetter` | `Sistec.Stack.Sinumerik.Driver`, `Sistec.Core` |
+| **UI** | `Sistec.Stack.Sinumerik.UI` | `PunchingProgramView`, `SinumerikStatusControl` | `Sistec.Stack.Sinumerik.Services`, `Sistec.Controls` |
+| **Simulator** | `Sistec.Stack.Sinumerik.Simulator` | `LagNx1525Simulation` (esistente, da restructure) | `Sistec.Stack.Sinumerik.Client` |
 
 ### 2.10 Stack Produzione / Job Management — Dettaglio
 
 | Layer | Progetto | Contenuto | Dipende da |
 |---|---|---|---|
-| **Services** | `Sistec.Production.Stack.Services` | `CellLogic`, `ProductionOrchestrator`, `PressRobotTeamService`, `PlcPunchingTeamService` | Tutti gli stack macchina, `Sistec.Core` |
-| **UI** | `Sistec.Production.Stack.UI` | `JobView`, `CutPlanView`, `PanelTrackingView`, `PalletStateView` | `Sistec.Production.Stack.Services`, `Sistec.Controls` |
-| **Services** | `Sistec.JobManagement.Stack.Services` | `JobManager`, `ProgramLogic`, `TrackerService` | `Sistec.Core`, `Sistec.Infra.Persistence` |
-| **UI** | `Sistec.JobManagement.Stack.UI` | `JobDialog`, `ProgramSelectionView` | `Sistec.JobManagement.Stack.Services`, `Sistec.Controls` |
+| **Services** | `Sistec.Stack.Production.Services` | `CellLogic`, `ProductionOrchestrator`, `PressRobotTeamService`, `PlcPunchingTeamService` | Tutti gli stack macchina, `Sistec.Core` |
+| **UI** | `Sistec.Stack.Production.UI` | `JobView`, `CutPlanView`, `PanelTrackingView`, `PalletStateView` | `Sistec.Stack.Production.Services`, `Sistec.Controls` |
+| **Services** | `Sistec.Stack.JobManagement.Services` | `JobManager`, `ProgramLogic`, `TrackerService` | `Sistec.Core`, `Sistec.Infra.Persistence` |
+| **UI** | `Sistec.Stack.JobManagement.UI` | `JobDialog`, `ProgramSelectionView` | `Sistec.Stack.JobManagement.Services`, `Sistec.Controls` |
 
 ### 2.11 Grafo Dipendenze (Unificato)
 
@@ -520,27 +523,28 @@ flowchart LR
     end
 
     subgraph Prod_Stacks["STACK APPLICATIVI"]
-        Prod["Sistec.Production.Stack"]
-        Job["Sistec.JobManagement.Stack"]
-        Maint["Sistec.Maintenance.Stack"]
-        Alarm["Sistec.Alarms.Stack"]
+        Prod["Sistec.Stack.Production"]
+        Job["Sistec.Stack.JobManagement"]
+        Maint["Sistec.Stack.Maintenance"]
+        Alarm["Sistec.Stack.Alarms"]
     end
 
     subgraph Machine_Stacks["STACK MACCHINA"]
-        Kuka["Sistec.Kuka.Stack"]
-        Safan["Sistec.Safan.Stack"]
-        Esa["Sistec.Esa.Stack"]
-        Plc["Sistec.PLC.Stack"]
-        Sinu["Sistec.Sinumerik.Stack"]
+        Kuka["Sistec.Stack.Kuka"]
+        Safan["Sistec.Stack.Safan"]
+        Esa["Sistec.Stack.Esa"]
+        Plc["Sistec.Stack.PLC"]
+        Sinu["Sistec.Stack.Sinumerik"]
     end
 
     subgraph Libraries["LIBRERIE FONDAZIONE"]
         Core["Sistec.Core"]
         Controls["Sistec.Controls"]
         SUI["Sistec.UI"]
-        OPC["Sistec.OpcUa.Library"]
-        Modbus["Sistec.Modbus.Library"]
-        Bus["Sistec.Bus.Library<br/>(Zebus o HTTP+Redis)"]
+        OPC["Sistec.Library.OpcUa"]
+        Modbus["Sistec.Library.Modbus"]
+        Bus["Sistec.Library.Bus<br/>(Zebus o HTTP+Redis)"]
+        RLib["Sistec.Library.Redis<br/>(Data Layer Trasversale)"]
     end
 
     subgraph Infra["INFRASTRUTTURA"]
@@ -607,10 +611,10 @@ I file DUT (tag mapping OPC UA) sono attualmente **scritti a mano** in entrambe 
 ```mermaid
 flowchart LR
     INPUT["CODESYS .txt / .xml"] --> GEN["Sistec.Infra.CodeGen<br/>(dotnet tool)"]
-    GEN --> POCO["Sistec.PLC.Stack.DTO (generated/)<br/>← POCO puri (senza EncodeableBase)"]
-    GEN --> OPCENC["Sistec.PLC.Stack.OPCUA (generated/)<br/>← Encodeable version"]
-    GEN --> TAGS["Sistec.PLC.Stack.Tags (generated/)<br/>← TagConstants.Main.ProductionValid"]
-    GEN --> BIND["Sistec.PLC.Stack.Binding (generated/)<br/>← Bind() tipizzato"]
+    GEN --> POCO["Sistec.Stack.PLC.DTO (generated/)<br/>← POCO puri (senza EncodeableBase)"]
+    GEN --> OPCENC["Sistec.Stack.PLC.OPCUA (generated/)<br/>← Encodeable version"]
+    GEN --> TAGS["Sistec.Stack.PLC.Tags (generated/)<br/>← TagConstants.Main.ProductionValid"]
+    GEN --> BIND["Sistec.Stack.PLC.Binding (generated/)<br/>← Bind() tipizzato"]
 ```
 
 **Vantaggi:**
@@ -706,7 +710,70 @@ L'architettura target adotta esplicitamente i seguenti pattern creazionali e str
 - **Factory Method** — nel Driver layer ogni stack ha un `TagFactory` che produce `TagValue<T>` tipizzati dal DTO CODESYS. Anche nel Layout Engine: `ControlFactory` (sez. 8.4) istanzia controlli UI da nome dichiarato in `layout.json`.
 - **Facade** — è il pattern strutturale dominante in ogni `Sistec.*.Stack.Services`. Il Client sa solo di byte/stream, il Driver sa di tag/mapping, il Services orchesta e presenta una superficie di dominio pulita.
 - **Proxy** — il Simulator di ogni stack (`Sistec.*.Stack.Simulator`) è un Proxy dell'implementazione reale. La DI sceglie quale registrare: `services.AddSingleton<KrcClient>` (produzione) vs `services.AddSingleton<IKrcClient, SimulatorKrcClient>` (test).
-- **Mediator** — lo stack `Sistec.Production.Stack` (sez. 2.9) è di fatto un Mediator tra tutti gli stack macchina, senza che KUKA conosca Safan o viceversa.
+- **Mediator** — lo stack `Sistec.Stack.Production` (sez. 2.9) è di fatto un Mediator tra tutti gli stack macchina, senza che KUKA conosca Safan o viceversa.
+
+### 2.17 Perché IoC e DI sono Essenziali
+
+L'architettura corrente (LAG e FAEL) non usa DI container. Il risultato è sotto gli occhi di tutti: costruttori da centinaia di righe, God Class, service locator sparsi, e l'impossibilità di testare un singolo layer senza istanziare mezzo sistema.
+
+**IoC e DI non sono una moda .NET.** Sono un principio ingegneristico trasversale — la Dependency Inversion Principle (DIP) è uno dei 5 SOLID — adottato da ogni ecosistema mainstream:
+
+| Ecosistema | Container / Meccanismo DI | Anno standardizzazione |
+|---|---|---|
+| .NET | `Microsoft.Extensions.DI` (built-in) | 2016 |
+| Java | Spring DI / Jakarta CDI / Google Guice | 2004 (Spring) |
+| Python | `dependency-injector` / FastAPI `Depends()` | 2018+ |
+| Rust | `shaku` / `orion` / trait injection pattern | 2020+ |
+| Go | `uber/fx` / `google/wire` (codegen) | 2018+ |
+| TypeScript | Angular DI / NestJS / `tsyringe` | 2016+ |
+| C++ | Qt DI / Boost.DI | pattern, non standard |.
+
+Tutti i framework moderni di ogni linguaggio si aspettano DI. I template `dotnet new` generano già `Program.cs` con `builder.Services`. Le librerie .NET di terze parti (Serilog, EF Core, MediatR, FluentValidation) offrono extension methods su `IServiceCollection`. L'unico posto dove **non** si usa DI è il codice legacy Sistec — e questo isolamento è la causa diretta di molti anti-pattern elencati in §1.5.
+
+**Cosa risolve DI, concretamente, per Sistec:**
+
+| Problema attuale | Con DI |
+|---|---|
+| `MainForm` sa di TcpClient, OPC UA, Safan, KUKA, DB, Watchdog | `MainForm` riceve già tutto costruito — zero conoscenza interna |
+| Aggiungere device = new in 5 punti del costruttore | Aggiungere device = 1 riga nel Composition Root |
+| Service locator `ObjectUsageMonitor.Instance`, `LogicCollection` | Ogni dipendenza arriva via costruttore, nessun global state |
+| Lifetime gestito a mano (chi dispose cosa?) | Container chiama `Dispose` in ordine inverso alla costruzione |
+| Test: devi mockare tutto a mano o fare integration test | `new TcpClient` vs `new SimulatorTcpClient` = 1 riga nel Composition Root |
+| Ordine di costruzione manuale (se A serve B, new B prima) | Container risolve l'ordine topologico automaticamente |
+| Dipendenze opzionali (Safan vs ESA) = if/else sparsi | `AddSafanStack()` / `AddEsaStack()` commentato nel Composition Root |
+| Condivisione librerie orizzontali = copia incolla in ogni stack | `AddSingleton<Sistec.Library.Tcp>` — unica istanza per tutti |
+
+**Esempio concreto — oggi vs domani:**
+
+```csharp
+// OGGI — LAG MainForm.cs
+public MainForm()
+{
+    _safanClient = new SafanClient("Safan_0");                    // dipende da TcpClient
+    _safanLogic = new SafanPressBrakeLogic(_safanClient).Use(...); // dipende da SafanClient
+    _plcLogic = new PlcLogic(GVL_HMI);                            // dipende da OpcUaClient
+    _cellLogic = new CellLogic(_plcLogic, _punchingLogic,          // dipende da tutto
+        _safanLogic, _robotLogic);
+    // 278 righe di new, configurazioni, event wiring
+}
+
+// DOMANI — Composition Root
+builder.Services.AddSafanStack();  // 4 righe registrano Client+Driver+Services
+builder.Services.AddPlcStack();
+builder.Services.AddProductionStack();
+
+public class FrmHMI(                         // costruttore vuoto,
+    CellLogic cellLogic,                     // DI risolve tutto
+    SafanPressBrakeLogic safanLogic, ...);
+
+public class SafanPressBrakeLogic(           // anche Services è testabile:
+    ISafanClient client,                     // può ricevere un SafanSimulator
+    IOptions<SafanOptions> options);         // o il SafanClient reale
+```
+
+**Non usare DI oggi significa ignorare un principio adottato trasversalmente da Java (2004), .NET (2016), TypeScript (2016), Go (2018), Python (2018), Rust (2020).** Non esiste un progetto enterprise in alcun linguaggio moderno che gestisca dipendenze con `new` a mano. Anche Avalonia, il framework HMI target, si integra nativamente con `IServiceCollection`.
+
+In sintesi: IoC e DI sono il **collante architetturale** di tutta la proposta. Senza DI, gli stack verticali sarebbero ancora legati da new espliciti — perderemmo testabilità, sostituibilità e la capacità di attivare/disattivare stack per commessa. Con DI, ogni stack è un pacchetto NuGet che si auto-registra, e il Composition Root è l'unico posto dove si decide cosa usare.
 
 ---
 
@@ -753,14 +820,14 @@ Sistec.Platform.*                   ← NuGet packages
 Solo gli stack necessari alla commessa in corso. Ogni stack è un pacchetto NuGet indipendente.
 
 ```
-Sistec.Kuka.Stack.*                 ← Se la commessa ha KUKA
+Sistec.Stack.Kuka.*                 ← Se la commessa ha KUKA
 ├── Client    → TCP/IP KRC
 ├── Driver    → Comandi robot
 ├── Services  → Logica robot
 ├── UI        → Pagine Avalonia
 └── Simulator → Test
 
-Sistec.Safan.Stack.*                ← Se la commessa ha pressa Safan
+Sistec.Stack.Safan.*                ← Se la commessa ha pressa Safan
 ├── Client    → TCP/IP Winsock
 ├── Driver    → Comandi pressa
 ├── Services  → Logica pressa
@@ -773,10 +840,10 @@ Sistec.Safan.Stack.*                ← Se la commessa ha pressa Safan
 ### Fase 3: Applicativi + UI (3-4 settimane)
 
 ```
-Sistec.Production.Stack             ← Orchestrazione cella
-Sistec.JobManagement.Stack          ← Cicli di vita job
-Sistec.Maintenance.Stack            ← Manutenzione predittiva (ONNX)
-Sistec.Alarms.Stack                 ← Alarm journal
+Sistec.Stack.Production             ← Orchestrazione cella
+Sistec.Stack.JobManagement          ← Cicli di vita job
+Sistec.Stack.Maintenance            ← Manutenzione predittiva (ONNX)
+Sistec.Stack.Alarms                 ← Alarm journal
 Sistec.RecipeEngine                 ← Workflow configurabile JSON
 Sistec.PalletStateMachine           ← Macchina a stati pallet
 
@@ -818,17 +885,17 @@ Le commesse successive riutilizzano Fase 1 + gli stack già esistenti, riducendo
 
 | Aspetto | Oggi | Domani |
 |---|---|---|
-| **KUKA Robot** | 5 progetti, frammentato | `Sistec.Kuka.Stack` (Client→UI) |
+| **KUKA Robot** | 5 progetti, frammentato | `Sistec.Stack.Kuka` (Client→UI) |
 | **Pressa** | Safan (TCP) in LAG, ESA (Modbus) in FAEL | Stack specifico per protocollo, interfaccia comune |
 | **PLC** | DUT manuali, legati a EncodeableBase | DUT generati, POCO puri + mapping |
 | **MainForm/FrmHMI** | 19-24 partial file, migliaia di righe | Thin orchestrator, ~300 righe |
 | **Common Project** | God Project da eliminare | Smantellato, logica nei moduli |
 | **Configurazione** | `Configuration.PlcConfig[...]` statico | `IOptions<T>` con DI |
 | **DB** | Repository in 2 layer, no Unit of Work | Persistence multi-progetto con UoW |
-| **Messaggi** | Solo in FAEL (Zebus) | `Sistec.Bus.Library` opzionale |
+| **Messaggi** | Solo in FAEL (Zebus) | `Sistec.Library.Bus` opzionale |
 | **Test** | 2 progetti NUnit (LAG), test manuali (FAEL) | NUnit per ogni stack + Simulator |
 | **Code Generation** | Assente | DUT generati da CODESYS |
-| **Onboarding** | "Da dove inizio?" | "Leggi Sistec.Kuka.Stack" |
+| **Onboarding** | "Da dove inizio?" | "Leggi Sistec.Stack.Kuka" |
 
 ---
 
@@ -836,12 +903,12 @@ Le commesse successive riutilizzano Fase 1 + gli stack già esistenti, riducendo
 
 | Vantaggio | Spiegazione |
 |---|---|
-| **Coesione** | Ogni macchina è un unico stack verticale. KUKA in `Sistec.Kuka.Stack.*` |
-| **Manutenibilità** | Modifica della pressa Safan? Solo `Sistec.Safan.Stack.*` |
+| **Coesione** | Ogni macchina è un unico stack verticale. KUKA in `Sistec.Stack.Kuka.*` |
+| **Manutenibilità** | Modifica della pressa Safan? Solo `Sistec.Stack.Safan.*` |
 | **Testabilità** | Ogni layer testabile isolatamente con mock/simulatore |
 | **Riutilizzo** | Uno stack può servire più commesse (LAG e FAEL condividono Kuka.Stack) |
 | **Configurabilità** | Per commessa: quali stack attivare, configurazione via IOptions |
-| **Technology Switch** | Sostituire OPC UA con gRPC? Solo `Sistec.PLC.Stack.Client` |
+| **Technology Switch** | Sostituire OPC UA con gRPC? Solo `Sistec.Stack.PLC.Client` |
 | **Code Quality** | Nessun DUT manuale, tag type-safe, nessuna dipendenza OPC UA nei modelli |
 | **Caricamento Mentale** | Basso: 1 stack = 1 macchina, 5 layer ben definiti |
 
@@ -878,7 +945,7 @@ flowchart LR
         S3["IOptions&lt;T&gt;<br/>+ DI"]
         S4["Microsoft.Extensions<br/>DependencyInjection"]
         S5["Dipendere da<br/>interfacce"]
-        S6["Sistec.Kuka.Stack<br/>modulo unico verticale"]
+        S6["Sistec.Stack.Kuka<br/>modulo unico verticale"]
         S7["Code Generation DUT<br/>POCO + EncodeableBase separati"]
         S8["TagConstants generati<br/>type-safe"]
         S9["Sistec.Infra.Persistence<br/>con Unit of Work"]
@@ -1061,14 +1128,14 @@ flowchart TB
     end
 
     subgraph Stacks["STACK VERTICALI"]
-        Kuka["Sistec.Kuka.Stack.UI"]
-        Safan["Sistec.Safan.Stack.UI"]
-        Esa["Sistec.Esa.Stack.UI"]
-        Plc["Sistec.PLC.Stack.UI"]
-        Sinumerik["Sistec.Sinumerik.Stack.UI"]
-        Prod["Sistec.Production.Stack.UI"]
-        Maint["Sistec.Maintenance.Stack.UI"]
-        Jobs["Sistec.JobManagement.Stack.UI"]
+        Kuka["Sistec.Stack.Kuka.UI"]
+        Safan["Sistec.Stack.Safan.UI"]
+        Esa["Sistec.Stack.Esa.UI"]
+        Plc["Sistec.Stack.PLC.UI"]
+        Sinumerik["Sistec.Stack.Sinumerik.UI"]
+        Prod["Sistec.Stack.Production.UI"]
+        Maint["Sistec.Stack.Maintenance.UI"]
+        Jobs["Sistec.Stack.JobManagement.UI"]
     end
 
     Manifest --> Engine
@@ -1165,7 +1232,7 @@ flowchart TB
 Ogni stack verticale registra i propri controlli in un dizionario globale al momento della registrazione nel DI container:
 
 ```csharp
-// In Sistec.Kuka.Stack.UI/ModuleRegistration.cs
+// In Sistec.Stack.Kuka.UI/ModuleRegistration.cs
 public static void RegisterControls(ControlRegistry registry)
 {
     registry.Register("Kuka.Views.ucKukaInfo",     () => new ucKukaInfo());
@@ -1173,7 +1240,7 @@ public static void RegisterControls(ControlRegistry registry)
     registry.Register("Kuka.Views.RobotDropOffset", () => new RobotDropOffsetView());
 }
 
-// In Sistec.PLC.Stack.UI/ModuleRegistration.cs
+// In Sistec.Stack.PLC.UI/ModuleRegistration.cs
 public static void RegisterControls(ControlRegistry registry)
 {
     registry.Register("PLC.Views.PlcStatusControl", () => new PlcStatusControl());
@@ -1327,10 +1394,13 @@ grpCalibrations.Text = t.Get("press.calibrations.title");
 | Componente | Ruolo |
 |---|---|
 | **DB cloud** | MySQL/MariaDB centralizzato, accessibile via internet da tutti gli impianti |
-| **Cache locale** | SQLite con chiavi `ui.*`, `alarm.*`, `robot.*` (critiche per operabilità) |
-| **Sync periodico** |ogni X minuti quando online; offline lavora con cache |
+| **Cache locale (default)** | SQLite con chiavi `ui.*`, `alarm.*`, `robot.*` (critiche per operabilità) |
+| **Cache distribuita (opzionale)** | Redis + TTL 1h: `sistec:{plant}:i18n:{key}` — aggiornamento immediato su tutti i pannelli, refresh automatico |
+| **Sync periodico** | ogni X minuti quando online; offline lavora con cache |
 | **Aggiornamento** | UPDATE sulla tabella cloud → tutti gli impianti vedono il cambiamento al prossimo sync |
 | **Logging mancanti** | `ITranslationsLogger` registra chiavi non trovate → dashboard cloud per identificare chiavi da aggiungere |
+
+Con Redis attivo, una traduzione corretta è visibile su tutti i pannelli in tempo reale via Pub/Sub, senza attendere il sync periodico. Il TTL garantisce refresh forzato periodico contro il DB cloud.
 
 **Vantaggi:**
 
@@ -1415,7 +1485,7 @@ Proposta: **Recipe = workflow configurabile in JSON**, eseguito da un `RecipeEng
 Il `RecipeEngine` esegue la sequenza senza sapere cosa fa ogni macchina — chiama i metodi sullo stack appropriato **via interfacce**:
 
 ```csharp
-// Sistec.RecipeEngine.Stack — generico, zero if/else su variante
+// Sistec.Stack.RecipeEngine — generico, zero if/else su variante
 public class RecipeEngine : IRecipeEngine
 {
     private readonly IMachineRegistry _machines;
@@ -1441,7 +1511,7 @@ public class RecipeEngine : IRecipeEngine
 Ogni stack macchina registra le azioni che sa eseguire:
 
 ```csharp
-// In Sistec.Kuka.Stack.Services
+// In Sistec.Stack.Kuka.Services
 public class KukaRobotActionProvider : IMachineActionProvider
 {
     public string MachineName => "Kuka_0";
@@ -1517,7 +1587,7 @@ Proposta: **macchina a stati finita configurabile in JSON**, ogni impianto defin
 ```
 
 ```csharp
-// Sistec.PalletTracking.Stack — generico, zero if/else
+// Sistec.Stack.PalletTracking — generico, zero if/else
 public class PalletStateMachine
 {
     private readonly PalletConfig _config;
@@ -1540,6 +1610,8 @@ public class PalletStateMachine
 }
 ```
 
+Con Redis opzionale, lo stato pallet è persistito in un Hash Redis: `sistec:{plant}:pallet:{id}` con campi `state`, `type`, `partCount`, `currentJob`. Se l'HMI riavvia, lo stato recupera da Redis invece di ripartire da EMPTY. TTL 24h per cleanup automatico pallet non usati. Il DB MySQL resta source of truth definitiva.
+
 #### Differenze per impianto in configurazione
 
 | Aspetto | LAG | FAEL AB | FAEL C |
@@ -1556,8 +1628,8 @@ public class PalletStateMachine
 
 | Stack | Sempre presente? | Layer | Dipende da |
 |---|---|---|---|
-| **`Sistec.RecipeEngine.Stack`** | ✅ Sempre | Services + UI | Tutti gli stack macchina (via `IMachineActionProvider`) |
-| **`Sistec.PalletTracking.Stack`** | ✅ Sempre | Services + UI | `Sistec.JobManagement.Stack` |
+| **`Sistec.Stack.RecipeEngine`** | ✅ Sempre | Services + UI | Tutti gli stack macchina (via `IMachineActionProvider`) |
+| **`Sistec.Stack.PalletTracking`** | ✅ Sempre | Services + UI | `Sistec.Stack.JobManagement` |
 
 Seguono lo stesso pattern: `Client? → Driver? → Services → UI → Simulator`. Services è il cuore (RecipeEngine, PalletStateMachine). UI fornisce viste di监控/controllo. Simulator permette test offline.
 
@@ -1577,10 +1649,10 @@ Seguono lo stesso pattern: `Client? → Driver? → Services → UI → Simulato
 
 ```
 Fase 3 (aggiornata): Stack applicativi (3 settimane)
-  ├── Sistec.Production.Stack
-  ├── Sistec.RecipeEngine.Stack  ← NUOVO
-  ├── Sistec.PalletTracking.Stack ← NUOVO
-  └── Sistec.JobManagement.Stack, Maintenance, Alarms
+  ├── Sistec.Stack.Production
+  ├── Sistec.Stack.RecipeEngine  ← NUOVO
+  ├── Sistec.Stack.PalletTracking ← NUOVO
+  └── Sistec.Stack.JobManagement, Maintenance, Alarms
 ```
 
 ### 9.6 Predictive Maintenance: ML al Posto del Timer
@@ -1594,12 +1666,12 @@ La proposta: **predictive maintenance basata su modello ML on-device**, dove ogn
 ```mermaid
 flowchart LR
     subgraph Stacks["STACK MACCHINA → TELEMETRY"]
-        Kuka["Sistec.Kuka.Stack<br/>pubblica: cicli gripper,<br/>torque giunti, ore moto<br/>via IMachineTelemetryProvider"]
-        Safan["Sistec.Safan.Stack<br/>pubblica: numero pieghe,<br/>forza cilindri, errori"]
-        Plc["Sistec.PLC.Stack<br/>pubblica: ore macchina,<br/>temperature motori, vibrazioni"]
+        Kuka["Sistec.Stack.Kuka<br/>pubblica: cicli gripper,<br/>torque giunti, ore moto<br/>via IMachineTelemetryProvider"]
+        Safan["Sistec.Stack.Safan<br/>pubblica: numero pieghe,<br/>forza cilindri, errori"]
+        Plc["Sistec.Stack.PLC<br/>pubblica: ore macchina,<br/>temperature motori, vibrazioni"]
     end
 
-    subgraph Maint["Sistec.Maintenance.Stack (migliorato)"]
+    subgraph Maint["Sistec.Stack.Maintenance (migliorato)"]
         Collect["TelemetryCollector<br/>raccoglie features<br/>da ogni stack via provider"]
         Feat["FeatureTransformer<br/>aggrega (avg, max, sum)<br/>per finestra temporale"]
         ML["OnnxRuntimeEngine<br/>carica modello .onnx<br/>→ RUL per componente"]
@@ -1622,7 +1694,7 @@ flowchart LR
     ML --> Sched
     Sched --> Alert
 
-    Maint -.->|telemetria aggregata| Cloud["Sistec.Cloud.Stack<br/>opzionale: invia features<br/>a cloud per ri-addestramento"]
+    Maint -.->|telemetria aggregata| Cloud["Sistec.Stack.Cloud<br/>opzionale: invia features<br/>a cloud per ri-addestramento"]
 ```
 
 #### Configurazione
@@ -1677,7 +1749,7 @@ public interface IMachineTelemetryProvider
         IEnumerable<string> tagNames, TimeSpan window, CancellationToken ct);
 }
 
-// Sistec.Kuka.Stack.Services — implementazione
+// Sistec.Stack.Kuka.Services — implementazione
 public class KukaTelemetryProvider : IMachineTelemetryProvider
 {
     public string MachineId => "Kuka_0";
@@ -1740,7 +1812,7 @@ public class KukaTelemetryProvider : IMachineTelemetryProvider
 
 #### Impatto sull'architettura
 
-- **`Sistec.Maintenance.Stack`** si arricchisce: aggiunge `PredictiveEngine`, `OnnxRuntimeEngine`, `TelemetryCollector`. Resta un pacchetto NuGet sempre presente.
+- **`Sistec.Stack.Maintenance`** si arricchisce: aggiunge `PredictiveEngine`, `OnnxRuntimeEngine`, `TelemetryCollector`. Resta un pacchetto NuGet sempre presente.
 - **Ogni stack macchina** (Kuka, Safan, PLC, ...) deve implementare `IMachineTelemetryProvider` — zero cambiamenti alla logica esistente, si aggiunge solo un provider.
 - **I file `.onnx`** sono dati di configurazione, non codice. Vanno in `config/models/` della commessa.
 - **ONNX Runtime** è una dipendenza NuGet del Maintenance.Stack. Funziona su Windows e Linux (Avalonia).
@@ -1809,12 +1881,12 @@ public class DigitalTwinService
 ```mermaid
 flowchart LR
     subgraph Stacks["STACK MACCHINA"]
-        Kuka["Sistec.Kuka.Stack<br/>→ posizione giunti, stato"]
-        Safan["Sistec.Safan.Stack<br/>→ corsa cilindro, forza"]
-        Plc["Sistec.PLC.Stack<br/>→ sensori, allarmi"]
+        Kuka["Sistec.Stack.Kuka<br/>→ posizione giunti, stato"]
+        Safan["Sistec.Stack.Safan<br/>→ corsa cilindro, forza"]
+        Plc["Sistec.Stack.PLC<br/>→ sensori, allarmi"]
     end
 
-    subgraph DT["Sistec.DigitalTwin.Stack (NUOVO)"]
+    subgraph DT["Sistec.Stack.DigitalTwin (NUOVO)"]
         DT_State["StateCollector<br/>Aggrega stato da tutti gli stack"]
         DT_3D["SceneRenderer<br/>SkiaSharp 3D / Avalonia 3D<br/>→ viewport interattivo"]
         DT_Anim["AnimationEngine<br/>Movimenti basati su dati reali"]
@@ -1838,9 +1910,9 @@ flowchart LR
 
 | Layer | Progetto | Contenuto |
 |---|---|---|
-| **Services** | `Sistec.DigitalTwin.Stack.Services` | `StateCollector` (polling ogni 100ms), `SceneGraph` (albero gerarchico macchina), `AnimationEngine` |
-| **UI** | `Sistec.DigitalTwin.Stack.UI` | `DigitalTwinView` (Avalonia control), `CameraController` (pan/zoom/rotate) |
-| **Model** | `Sistec.DigitalTwin.Stack.Models` | `MachineModel`, `JointState`, `ComponentColor`, `AnimationKeyframe` |
+| **Services** | `Sistec.Stack.DigitalTwin.Services` | `StateCollector` (polling ogni 100ms), `SceneGraph` (albero gerarchico macchina), `AnimationEngine` |
+| **UI** | `Sistec.Stack.DigitalTwin.UI` | `DigitalTwinView` (Avalonia control), `CameraController` (pan/zoom/rotate) |
+| **Model** | `Sistec.Stack.DigitalTwin.Models` | `MachineModel`, `JointState`, `ComponentColor`, `AnimationKeyframe` |
 
 #### layout.json
 
@@ -1862,23 +1934,23 @@ flowchart LR
 
 ```
 Fase 3 (nuova): Stack applicativi (4-5 settimane)
-  ├── Sistec.Production.Stack
-  ├── Sistec.RecipeEngine.Stack
-  ├── Sistec.PalletTracking.Stack
-  ├── Sistec.Maintenance.Stack (predictive ML)
-  ├── Sistec.DigitalTwin.Stack (Livello 1-2)  ← NUOVO
-  └── Sistec.JobManagement.Stack, Alarms
+  ├── Sistec.Stack.Production
+  ├── Sistec.Stack.RecipeEngine
+  ├── Sistec.Stack.PalletTracking
+  ├── Sistec.Stack.Maintenance (predictive ML)
+  ├── Sistec.Stack.DigitalTwin (Livello 1-2)  ← NUOVO
+  └── Sistec.Stack.JobManagement, Alarms
 ```
 
 Il Digital Twin è un **differenziatore competitivo** — nessun competitor Sistec (PMI italiana) lo offre. Per la prima commessa greenfield, il Livello 1 (schematico 2.5D) è sufficiente per dimostrare il concept.
 
 ```
 Fase 3 (aggiornata): Stack applicativi (3-4 settimane)
-  ├── Sistec.Production.Stack
-  ├── Sistec.RecipeEngine.Stack
-  ├── Sistec.PalletTracking.Stack
-  ├── Sistec.Maintenance.Stack (predictive ML + Digital Twin)  ← MIGLIORATO
-  └── Sistec.JobManagement.Stack, Alarms
+  ├── Sistec.Stack.Production
+  ├── Sistec.Stack.RecipeEngine
+  ├── Sistec.Stack.PalletTracking
+  ├── Sistec.Stack.Maintenance (predictive ML + Digital Twin)  ← MIGLIORATO
+  └── Sistec.Stack.JobManagement, Alarms
 ```
 
 ### 9.7 Logging Strutturato con DI, non Statico
@@ -2004,27 +2076,27 @@ flowchart TB
         ConfigLib["Sistec.Configuration<br/>netstandard2.1"]
         Persistence["Sistec.Infra.Persistence*<br/>netstandard2.1"]
 
-        Plc["Sistec.PLC.Stack<br/>net8.0-windows"]
-        Alarms["Sistec.Alarms.Stack<br/>net8.0-windows"]
-        Maintenance["Sistec.Maintenance.Stack<br/>net8.0-windows"]
-        JobMgmt["Sistec.JobManagement.Stack<br/>net8.0-windows"]
-        Production["Sistec.Production.Stack<br/>net8.0-windows"]
+        Plc["Sistec.Stack.PLC<br/>net8.0-windows"]
+        Alarms["Sistec.Stack.Alarms<br/>net8.0-windows"]
+        Maintenance["Sistec.Stack.Maintenance<br/>net8.0-windows"]
+        JobMgmt["Sistec.Stack.JobManagement<br/>net8.0-windows"]
+        Production["Sistec.Stack.Production<br/>net8.0-windows"]
     end
 
     subgraph Optional["🔧 PER COMMESSA (Machine)"]
-        Kuka["Sistec.Kuka.Stack"]
-        Fanuc["Sistec.Fanuc.Stack<br/>(futuro)"]
+        Kuka["Sistec.Stack.Kuka"]
+        Fanuc["Sistec.Stack.Fanuc<br/>(futuro)"]
         OtherRobots["⋯ altro robot"]
 
-        Safan["Sistec.Safan.Stack"]
-        Gade["Sistec.Gade.Stack<br/>(futuro)"]
-        Esa["Sistec.Esa.Stack"]
+        Safan["Sistec.Stack.Safan"]
+        Gade["Sistec.Stack.Gade<br/>(futuro)"]
+        Esa["Sistec.Stack.Esa"]
         OtherPress["⋯ altra pressa"]
 
-        Sinumerik["Sistec.Sinumerik.Stack"]
-        OpcUaLib["Sistec.OpcUa.Library"]
-        ModbusLib["Sistec.Modbus.Library"]
-        BusLib["Sistec.Bus.Library"]
+        Sinumerik["Sistec.Stack.Sinumerik"]
+        OpcUaLib["Sistec.Library.OpcUa"]
+        ModbusLib["Sistec.Library.Modbus"]
+        BusLib["Sistec.Library.Bus"]
     end
 
     classDef always fill:#e1f5e1,stroke:#2e7d32
@@ -2043,20 +2115,20 @@ flowchart TB
 | | `Sistec.LayoutEngine` | ✅ Sempre | Motore layout da JSON |
 | | `Sistec.Configuration` | ✅ Sempre | Options pattern |
 | | `Sistec.Infra.Persistence.*` | ✅ Sempre | DB access |
-| | **`Sistec.PLC.Stack`** | ✅ **Sempre** | Ogni impianto ha un PLC |
-| | **`Sistec.Alarms.Stack`** | ✅ **Sempre** | Allarmi e notifiche |
-| | **`Sistec.Maintenance.Stack`** | ✅ **Sempre** | Manutenzione |
-| | **`Sistec.JobManagement.Stack`** | ✅ **Sempre** | Job lifecycle, ricette |
-| | **`Sistec.Production.Stack`** | ✅ **Sempre** | Orchestrazione produzione |
-| **Machine** | `Sistec.Kuka.Stack` | ❌ Se robot KUKA | TCP KRC |
-| | `Sistec.Fanuc.Stack` | ❌ Se robot Fanuc | Futuro |
-| | `Sistec.Safan.Stack` | ❌ Se pressa Safan | TCP |
-| | `Sistec.Gade.Stack` | ❌ Se pressa Gade | Futuro |
-| | `Sistec.Esa.Stack` | ❌ Se pressa ESA | Modbus |
-| | `Sistec.Sinumerik.Stack` | ❌ Se CNC Siemens | OPC UA |
-| **Lib** | `Sistec.OpcUa.Library` | ❌ Solo se serve OPC UA | Dipende dai macchinari |
-| | `Sistec.Modbus.Library` | ❌ Solo se serve Modbus | Dipende dai macchinari |
-| | `Sistec.Bus.Library` | ❌ Solo se serve Zebus | Dipende dall'impianto |
+| | **`Sistec.Stack.PLC`** | ✅ **Sempre** | Ogni impianto ha un PLC |
+| | **`Sistec.Stack.Alarms`** | ✅ **Sempre** | Allarmi e notifiche |
+| | **`Sistec.Stack.Maintenance`** | ✅ **Sempre** | Manutenzione |
+| | **`Sistec.Stack.JobManagement`** | ✅ **Sempre** | Job lifecycle, ricette |
+| | **`Sistec.Stack.Production`** | ✅ **Sempre** | Orchestrazione produzione |
+| **Machine** | `Sistec.Stack.Kuka` | ❌ Se robot KUKA | TCP KRC |
+| | `Sistec.Stack.Fanuc` | ❌ Se robot Fanuc | Futuro |
+| | `Sistec.Stack.Safan` | ❌ Se pressa Safan | TCP |
+| | `Sistec.Stack.Gade` | ❌ Se pressa Gade | Futuro |
+| | `Sistec.Stack.Esa` | ❌ Se pressa ESA | Modbus |
+| | `Sistec.Stack.Sinumerik` | ❌ Se CNC Siemens | OPC UA |
+| **Lib** | `Sistec.Library.OpcUa` | ❌ Solo se serve OPC UA | Dipende dai macchinari |
+| | `Sistec.Library.Modbus` | ❌ Solo se serve Modbus | Dipende dai macchinari |
+| | `Sistec.Library.Bus` | ❌ Solo se serve Zebus | Dipende dall'impianto |
 
 ### 10.2 Progetto Commessa: Prima e Dopo
 
@@ -2099,11 +2171,11 @@ flowchart TB
     <PackageReference Include="Sistec.LayoutEngine" Version="1.0.*" />
     <PackageReference Include="Sistec.Configuration" Version="1.0.*" />
     <PackageReference Include="Sistec.Infra.Persistence" Version="1.0.*" />
-    <PackageReference Include="Sistec.PLC.Stack" Version="2.1.*" />
-    <PackageReference Include="Sistec.Alarms.Stack" Version="2.1.*" />
-    <PackageReference Include="Sistec.Maintenance.Stack" Version="2.1.*" />
-    <PackageReference Include="Sistec.JobManagement.Stack" Version="2.1.*" />
-    <PackageReference Include="Sistec.Production.Stack" Version="2.1.*" />
+    <PackageReference Include="Sistec.Stack.PLC" Version="2.1.*" />
+    <PackageReference Include="Sistec.Stack.Alarms" Version="2.1.*" />
+    <PackageReference Include="Sistec.Stack.Maintenance" Version="2.1.*" />
+    <PackageReference Include="Sistec.Stack.JobManagement" Version="2.1.*" />
+    <PackageReference Include="Sistec.Stack.Production" Version="2.1.*" />
     <!-- 🔧 Qui l'ingegnere aggiunge i pacchetti macchinario -->
   </ItemGroup>
 </Project>
@@ -2126,17 +2198,17 @@ flowchart TB
     <PackageReference Include="Sistec.LayoutEngine" Version="1.0.*" />
     <PackageReference Include="Sistec.Configuration" Version="1.0.*" />
     <PackageReference Include="Sistec.Infra.Persistence" Version="1.0.*" />
-    <PackageReference Include="Sistec.PLC.Stack" Version="2.1.*" />
-    <PackageReference Include="Sistec.Alarms.Stack" Version="2.1.*" />
-    <PackageReference Include="Sistec.Maintenance.Stack" Version="2.1.*" />
-    <PackageReference Include="Sistec.JobManagement.Stack" Version="2.1.*" />
-    <PackageReference Include="Sistec.Production.Stack" Version="2.1.*" />
+    <PackageReference Include="Sistec.Stack.PLC" Version="2.1.*" />
+    <PackageReference Include="Sistec.Stack.Alarms" Version="2.1.*" />
+    <PackageReference Include="Sistec.Stack.Maintenance" Version="2.1.*" />
+    <PackageReference Include="Sistec.Stack.JobManagement" Version="2.1.*" />
+    <PackageReference Include="Sistec.Stack.Production" Version="2.1.*" />
 
     <!-- Machine (aggiunti per LAG) -->
-    <PackageReference Include="Sistec.Kuka.Stack" Version="2.1.*" />
-    <PackageReference Include="Sistec.Safan.Stack" Version="2.1.*" />
-    <PackageReference Include="Sistec.Sinumerik.Stack" Version="2.1.*" />
-    <PackageReference Include="Sistec.OpcUa.Library" Version="2.1.*" />
+    <PackageReference Include="Sistec.Stack.Kuka" Version="2.1.*" />
+    <PackageReference Include="Sistec.Stack.Safan" Version="2.1.*" />
+    <PackageReference Include="Sistec.Stack.Sinumerik" Version="2.1.*" />
+    <PackageReference Include="Sistec.Library.OpcUa" Version="2.1.*" />
   </ItemGroup>
 
   <ItemGroup>
@@ -2163,8 +2235,8 @@ flowchart TB
     <!-- ... identico al template ... -->
 
     <!-- Machine (aggiunti per FAEL C) -->
-    <PackageReference Include="Sistec.Kuka.Stack" Version="2.1.*" />
-    <PackageReference Include="Sistec.OpcUa.Library" Version="2.1.*" />
+    <PackageReference Include="Sistec.Stack.Kuka" Version="2.1.*" />
+    <PackageReference Include="Sistec.Library.OpcUa" Version="2.1.*" />
     <!-- Nota: senza Safan.Stack, senza Esa.Stack, senza Sinumerik.Stack -->
     <!-- Non serve Modbus.Library (nessuna pressa) -->
   </ItemGroup>
@@ -2173,7 +2245,7 @@ flowchart TB
 
 ### 10.3 Consistenza Versioning
 
-Tutti i pacchetti di uno stack verticale condividono la **stessa versione** (es. `Sistec.Kuka.Stack.Client` 2.1.0, `Sistec.Kuka.Stack.Driver` 2.1.0, `Sistec.Kuka.Stack.Services` 2.1.0, ecc.). Questo garantisce che i layer siano compatibili.
+Tutti i pacchetti di uno stack verticale condividono la **stessa versione** (es. `Sistec.Stack.Kuka.Client` 2.1.0, `Sistec.Stack.Kuka.Driver` 2.1.0, `Sistec.Stack.Kuka.Services` 2.1.0, ecc.). Questo garantisce che i layer siano compatibili.
 
 ```xml
 <!-- Directory.Build.props nel repo dello stack -->
@@ -2197,7 +2269,7 @@ flowchart LR
 
     B --> C["Il template include già<br/>tutti i pacchetti platform<br/>(PLC, Alarms, JobMgmt,<br/>Production, Maintenance)"]
 
-    C --> D["📦 Aggiunge solo<br/>pacchetti macchinario<br/>`dotnet add package Sistec.Kuka.Stack`"]
+    C --> D["📦 Aggiunge solo<br/>pacchetti macchinario<br/>`dotnet add package Sistec.Stack.Kuka`"]
 
     D --> E["⚙️ Compila manifest.json<br/>layout.json config/"]
 
@@ -2235,14 +2307,14 @@ Non serve convertire tutto in una volta. Si procede per fasi, partendo da ciò c
 ```
 Fase 1: Platform NuGet (sempre presenti)
   ├── Estrarre in repo separati: Sistec.Core, Sistec.Controls, Sistec.UI
-  ├── Estrarre: Sistec.PLC.Stack, Sistec.Alarms.Stack, Sistec.Maintenance.Stack
-  ├── Estrarre: Sistec.JobManagement.Stack, Sistec.Production.Stack
+  ├── Estrarre: Sistec.Stack.PLC, Sistec.Stack.Alarms, Sistec.Stack.Maintenance
+  ├── Estrarre: Sistec.Stack.JobManagement, Sistec.Stack.Production
   ├── CI/CD per ognuno: build → test NUnit → publish NuGet
   ├── Template `dotnet new sistec-hmi` con TUTTI questi pacchetti già inclusi
   └── LAG e FAEL iniziano a referenziarli via NuGet
 
 Fase 2: Machine NuGet (per commessa)
-  ├── Sistec.Kuka.Stack come pilota
+  ├── Sistec.Stack.Kuka come pilota
   ├── Estrarre dal monolite in repo separato
   ├── LAG e FAEL aggiungono solo Kuka.Stack → primo stack condiviso
   ├── Poi Safan.Stack, Esa.Stack, Sinumerik.Stack...
@@ -2374,21 +2446,21 @@ La separazione UI (layer `Stack.UI` WinForms) già prevista nell'architettura a 
 ```mermaid
 flowchart LR
     subgraph Oggi["OGGI — WinForms"]
-        UI_WF["Sistec.Kuka.Stack.UI<br/>(UserControl WinForms)"]
-        SVC["Sistec.Kuka.Stack.Services<br/>(logica pura)"]
-        DRV["Sistec.Kuka.Stack.Driver<br/>(tag provider)"]
-        CLI["Sistec.Kuka.Stack.Client<br/>(TCP KRC)"]
+        UI_WF["Sistec.Stack.Kuka.UI<br/>(UserControl WinForms)"]
+        SVC["Sistec.Stack.Kuka.Services<br/>(logica pura)"]
+        DRV["Sistec.Stack.Kuka.Driver<br/>(tag provider)"]
+        CLI["Sistec.Stack.Kuka.Client<br/>(TCP KRC)"]
     end
 
     subgraph Transizione["TRANSIZIONE — side-by-side"]
-        UI_WF2["Sistec.Kuka.Stack.UI.WinForms<br/>(vecchio, legacy)"]
-        UI_AV["Sistec.Kuka.Stack.UI.Avalonia<br/>(nuovo, moderno)"]
-        SVC2["Sistec.Kuka.Stack.Services<br/>(identico, nessuna modifica)"]
+        UI_WF2["Sistec.Stack.Kuka.UI.WinForms<br/>(vecchio, legacy)"]
+        UI_AV["Sistec.Stack.Kuka.UI.Avalonia<br/>(nuovo, moderno)"]
+        SVC2["Sistec.Stack.Kuka.Services<br/>(identico, nessuna modifica)"]
     end
 
     subgraph Domani["DOMANI — Avalonia"]
-        UI_AV2["Sistec.Kuka.Stack.UI<br/>(solo Avalonia, WinForms rimosso)"]
-        SVC3["Sistec.Kuka.Stack.Services<br/>(identico)"]
+        UI_AV2["Sistec.Stack.Kuka.UI<br/>(solo Avalonia, WinForms rimosso)"]
+        SVC3["Sistec.Stack.Kuka.Services<br/>(identico)"]
     end
 
     Oggi --> Transizione
@@ -2432,7 +2504,7 @@ public class KukaInfoView : UserControl
 ```xml
 <!-- DOMANI — Avalonia XAML -->
 <UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:vm="clr-namespace:Sistec.Kuka.Stack.ViewModels">
+             xmlns:vm="clr-namespace:Sistec.Stack.Kuka.ViewModels">
     <StackPanel>
         <TextBlock Text="{Binding RobotName}" FontSize="18" />
         <TextBlock Text="{Binding Status}" 
@@ -2456,7 +2528,7 @@ Fase 1: Kuka.Stack.UI pilota (2-3 settimane)
   ├── Riscrivere ucKukaInfo, KukaOverride in Avalonia
   ├── ViewModel per ogni view (logica UI, non di dominio)
   ├── Testare side-by-side con WinForms
-  └── Rilasciare Sistec.Kuka.Stack.UI.Avalonia come pacchetto NuGet
+  └── Rilasciare Sistec.Stack.Kuka.UI.Avalonia come pacchetto NuGet
 
 Fase 2: Altri stack (2-3 settimane per stack)
   ├── Safan.Stack.UI → Avalonia
@@ -2720,6 +2792,8 @@ public enum Shift { Morning = 1, Afternoon = 2, Night = 3 }
 | `IAuthenticationService` | Login/Logout, validazione PIN | `LoginAsync(badgeId, pin)`, `LoginAsync(rfidToken)`, `LogoutAsync()`, `GetCurrentUser()` |
 | `IEmployeeRepository` | CRUD dipendenti | `GetByIdAsync()`, `GetByShiftAsync()`, `GetActiveAsync()`, `CreateAsync()`, `UpdatePinAsync()` |
 | `IRoleRepository` | CRUD ruoli + permessi | `GetAllAsync()`, `GetWithPermissionsAsync()`, `UpdatePermissionsAsync()` |
+
+Con Redis opzionale, la sessione operatore vive in `sistec:{plant}:session:{badge}` con TTL 30min e heartbeat estensibile. L'operatore che badgea su AB è riconosciuto anche su C — senza rilogin. `RedisSessionStore` pubblica su Pub/Sub i cambi di stato (login/logout) per aggiornare in tempo reale la lista operatori attivi su tutti i pannelli. Auto-logout centralizzato: se Redis scade la sessione, tutti i pannelli vedono l'operatore sloggato contemporaneamente.
 | `IProductionAnalyticsService` | Statistiche per operatore | `GetPiecesPerHourAsync(operatorId, range)`, `GetScrapRateAsync(operatorId, range)`, `GetShiftComparisonAsync(range)` |
 | `IAuditService` | Log eventi operatore | `LogEventAsync(operatorId, eventType, details)`, `GetEventsAsync(filters)` |
 
@@ -2843,10 +2917,10 @@ Con stack verticali, NuGet e Avalonia la domanda sorge spontanea. La risposta è
 flowchart TB
     subgraph ModularMonolith["✅ MODULAR MONOLITH (proposto)"]
         MM_PROC["1 processo<br/>Sistec.HMI.exe"]
-        MM_KUKA["Sistec.Kuka.Stack<br/>(DLL in-process)"]
-        MM_SAFAN["Sistec.Safan.Stack<br/>(DLL in-process)"]
-        MM_PLC["Sistec.PLC.Stack<br/>(DLL in-process)"]
-        MM_PRODUCTION["Sistec.Production.Stack<br/>(DLL in-process)"]
+        MM_KUKA["Sistec.Stack.Kuka<br/>(DLL in-process)"]
+        MM_SAFAN["Sistec.Stack.Safan<br/>(DLL in-process)"]
+        MM_PLC["Sistec.Stack.PLC<br/>(DLL in-process)"]
+        MM_PRODUCTION["Sistec.Stack.Production<br/>(DLL in-process)"]
         MM_LAYOUT["LayoutEngine + Avalonia UI"]
 
         MM_KUKA -.->|chiamate dirette, interfacce| MM_PRODUCTION
@@ -2918,14 +2992,14 @@ Un discorso diverso vale per la **raccolta dati verso cloud** — che ha senso e
 ```mermaid
 flowchart LR
     subgraph HMI["HMI (1 processo, Modular Monolith)"]
-        Kuka["Sistec.Kuka.Stack"]
-        Safan["Sistec.Safan.Stack"]
-        PLC["Sistec.PLC.Stack"]
-        Prod["Sistec.Production.Stack"]
-        Alarms["Sistec.Alarms.Stack"]
-        Jobs["Sistec.JobManagement.Stack"]
+        Kuka["Sistec.Stack.Kuka"]
+        Safan["Sistec.Stack.Safan"]
+        PLC["Sistec.Stack.PLC"]
+        Prod["Sistec.Stack.Production"]
+        Alarms["Sistec.Stack.Alarms"]
+        Jobs["Sistec.Stack.JobManagement"]
 
-        subgraph Cloud["Sistec.Cloud.Stack (NUOVO)"]
+        subgraph Cloud["Sistec.Stack.Cloud (NUOVO)"]
             Collector["CloudDataCollector<br/>Si sottoscrive a eventi<br/>degli altri stack"]
             MQTT["MqttPublisher<br/>Invia a broker MQTT<br/>o HTTP API"]
             Buffer["OfflineBuffer<br/>Coda locale se cloud<br/>non disponibile"]
@@ -2947,35 +3021,36 @@ flowchart LR
 
 | Aspetto | Dettaglio |
 |---|---|
-| **Cos'è** | `Sistec.Cloud.Stack` — un pacchetto NuGet come tutti gli altri |
+| **Cos'è** | `Sistec.Stack.Cloud` — un pacchetto NuGet come tutti gli altri |
 | **Cosa fa** | Ascolta eventi dagli altri stack e li invia a un broker cloud |
 | **Cosa NON fa** | Non comanda l'impianto. Se il cloud è giù, la produzione continua |
 | **Protocollo** | MQTT (standard IIoT), OPC UA PubSub, o HTTP REST |
 | **Dati tipici** | Conteggio pezzi, allarmi, job completati, stato macchine, OEE |
-| **Buffer** | Coda su disco locale (SQLite) se cloud non raggiungibile — svuota quando torna online |
+| **Buffer (default)** | Coda su disco locale (SQLite) se cloud non raggiungibile — svuota quando torna online |
+| **Buffer (Redis, opzionale)** | Redis Streams `sistec:{plant}:cloud:stream` — persistente via RDB/AOF, consumer groups per partizione dati, ripartenza senza perdita |
 | **Configurazione** | `cloud.json`: endpoint, topic, credenziali, intervallo pubblicazione |
 | **Opzionale** | Se non includi il pacchetto NuGet, l'HMI funziona identico — senza cloud |
 
 #### Perché questo NON rompe l'architettura
 
 - È uno **stack verticale come tutti gli altri** — stesso pattern (Client? → Driver? → Services → UI? → Simulator)
-- È **opzionale** — non incluso nel template base, si aggiunge via `dotnet add package Sistec.Cloud.Stack`
+- È **opzionale** — non incluso nel template base, si aggiunge via `dotnet add package Sistec.Stack.Cloud`
 - È **non invasivo** — non tocca gli altri stack, si aggancia ai loro eventi
 - È **testabile** con un `CloudSimulator` (broker MQTT finto) come qualsiasi altro stack
 
 #### Esempio
 
 ```csharp
-// Sistec.Cloud.Stack/CloudDataCollector.cs
+// Sistec.Stack.Cloud/CloudDataCollector.cs
 public class CloudDataCollector : ICloudDataCollector
 {
     private readonly MqttPublisher _mqtt;
     private readonly OfflineBuffer _buffer;
 
     public CloudDataCollector(
-        IAlarmService alarms,       // da Sistec.Alarms.Stack
-        IJobTracker jobs,           // da Sistec.JobManagement.Stack
-        IProductionTracker prod,    // da Sistec.Production.Stack
+        IAlarmService alarms,       // da Sistec.Stack.Alarms
+        IJobTracker jobs,           // da Sistec.Stack.JobManagement
+        IProductionTracker prod,    // da Sistec.Stack.Production
         MqttPublisher mqtt,
         IOptions<CloudOptions> options)
     {
@@ -3001,7 +3076,7 @@ public class CloudDataCollector : ICloudDataCollector
 
 | Scenario | Cloud Stack |
 |---|---|
-| Cliente vuole dashboard centrale con OEE di 10 impianti | ✅ Aggiungi `Sistec.Cloud.Stack` |
+| Cliente vuole dashboard centrale con OEE di 10 impianti | ✅ Aggiungi `Sistec.Stack.Cloud` |
 | Manutenzione predittiva su cloud | ✅ Idem |
 | Integrazione con ERP/MES | ✅ Idem |
 | Necessario per la produzione (cloud comanda l'impianto) | ❌ **Non farlo**. Il cloud non deve comandare un HMI industriale in real-time |
@@ -3040,7 +3115,7 @@ flowchart LR
     end
 
     subgraph Bridge["BRIDGE"]
-        SM["Sistec.Cloud.Stack<br/>OPC UA PubSub Reader<br/>→ Sparkplug B Edge Node"]
+        SM["Sistec.Stack.Cloud<br/>OPC UA PubSub Reader<br/>→ Sparkplug B Edge Node"]
     end
 
     subgraph Cloud["NORTHBOUND (IT/Cloud)"]
@@ -3078,7 +3153,7 @@ spBv1.0/sistec-lag-5315/
 
 **Vantaggio:** aggiungere una dashboard, un MES o un ERP = si sottoscrive al namespace. Zero nuove integrazioni.
 
-**Impatto:** Nuovo componente `Sistec.Cloud.Stack.SparkplugNode` che implementa l'Edge Node Sparkplug con birth/death/data. Attivabile via configurazione.
+**Impatto:** Nuovo componente `Sistec.Stack.Cloud.SparkplugNode` che implementa l'Edge Node Sparkplug con birth/death/data. Attivabile via configurazione.
 
 **In sintesi:** il Cloud Connector è uno stack verticale come gli altri, non un microservizio. Si aggiunge con un NuGet package, è opzionale, e non cambia l'architettura di base.
 
@@ -3094,11 +3169,11 @@ Ogni repo stack ha una pipeline CI/CD identica nel pattern: build → unit test 
 flowchart TB
     subgraph Repos["REPOS PER STACK"]
         CoreRepo["sistec-core<br/>Sistec.Core"]
-        KukaRepo["sistec-kuka-stack<br/>Sistec.Kuka.Stack"]
-        SafanRepo["sistec-safan-stack<br/>Sistec.Safan.Stack"]
-        PLCRepo["sistec-plc-stack<br/>Sistec.PLC.Stack"]
-        ProdRepo["sistec-production-stack<br/>Sistec.Production.Stack"]
-        CloudRepo["sistec-cloud-stack<br/>Sistec.Cloud.Stack"]
+        KukaRepo["sistec-kuka-stack<br/>Sistec.Stack.Kuka"]
+        SafanRepo["sistec-safan-stack<br/>Sistec.Stack.Safan"]
+        PLCRepo["sistec-plc-stack<br/>Sistec.Stack.PLC"]
+        ProdRepo["sistec-production-stack<br/>Sistec.Stack.Production"]
+        CloudRepo["sistec-cloud-stack<br/>Sistec.Stack.Cloud"]
     end
 
     subgraph Pipelines["PIPELINE TIPO per ogni stack"]
@@ -3113,10 +3188,10 @@ flowchart TB
 
     subgraph Feed["NuGet Feed"]
         CorePkg["Sistec.Core 5.1.0"]
-        KukaPkg["Sistec.Kuka.Stack 2.3.0"]
-        SafanPkg["Sistec.Safan.Stack 2.3.0"]
-        PLCPkg["Sistec.PLC.Stack 2.3.0"]
-        CloudPkg["Sistec.Cloud.Stack 1.0.0"]
+        KukaPkg["Sistec.Stack.Kuka 2.3.0"]
+        SafanPkg["Sistec.Stack.Safan 2.3.0"]
+        PLCPkg["Sistec.Stack.PLC 2.3.0"]
+        CloudPkg["Sistec.Stack.Cloud 1.0.0"]
     end
 
     subgraph HMI_Release["PIPELINE HMI COMMESSA"]
@@ -3164,7 +3239,7 @@ variables:
   - name: MajorMinor
     value: '5.1'      # aggiornato a ogni major/minor release
   - name: ProjectName
-    value: 'Sistec.Kuka.Stack'
+    value: 'Sistec.Stack.Kuka'
 
 stages:
   - stage: Build
@@ -3286,7 +3361,7 @@ Gates applicati a ogni build su `main`:
 
 ```yaml
 # Version scheme: Major.Minor.DayOfYear.Revision
-# Esempio: Sistec.Kuka.Stack 2.3.215.1 (build 215 del 2026, revisione 1)
+# Esempio: Sistec.Stack.Kuka 2.3.215.1 (build 215 del 2026, revisione 1)
 #
 # Major.Minor:
 #   - Si aggiorna manualmente nel file azure-pipelines.yml
@@ -3327,15 +3402,15 @@ sistec-kuka-stack/
 ├── azure-pipelines.yml           ← Pipeline CI/CD
 ├── Directory.Build.props          ← Versioning condiviso
 ├── src/
-│   ├── Sistec.Kuka.Stack.Client/     ← .csproj -> Sistec.Kuka.Stack.Client.nupkg
-│   ├── Sistec.Kuka.Stack.Driver/     ← .csproj -> Sistec.Kuka.Stack.Driver.nupkg
-│   ├── Sistec.Kuka.Stack.Services/   ← .csproj -> Sistec.Kuka.Stack.Services.nupkg
-│   ├── Sistec.Kuka.Stack.UI/         ← .csproj -> Sistec.Kuka.Stack.UI.nupkg
-│   └── Sistec.Kuka.Stack.Simulator/  ← .csproj -> Sistec.Kuka.Stack.Simulator.nupkg
+│   ├── Sistec.Stack.Kuka.Client/     ← .csproj -> Sistec.Stack.Kuka.Client.nupkg
+│   ├── Sistec.Stack.Kuka.Driver/     ← .csproj -> Sistec.Stack.Kuka.Driver.nupkg
+│   ├── Sistec.Stack.Kuka.Services/   ← .csproj -> Sistec.Stack.Kuka.Services.nupkg
+│   ├── Sistec.Stack.Kuka.UI/         ← .csproj -> Sistec.Stack.Kuka.UI.nupkg
+│   └── Sistec.Stack.Kuka.Simulator/  ← .csproj -> Sistec.Stack.Kuka.Simulator.nupkg
 ├── tests/
-│   ├── Sistec.Kuka.Stack.UnitTests/   ← NUnit, Category=Unit
-│   ├── Sistec.Kuka.Stack.IntegrationTests/ ← NUnit, Category=Integration
-│   └── Sistec.Kuka.Stack.SimulatorTests/   ← Test contro il Simulator
+│   ├── Sistec.Stack.Kuka.UnitTests/   ← NUnit, Category=Unit
+│   ├── Sistec.Stack.Kuka.IntegrationTests/ ← NUnit, Category=Integration
+│   └── Sistec.Stack.Kuka.SimulatorTests/   ← Test contro il Simulator
 ├── docs/
 ├── README.md
 └── CHANGELOG.md
@@ -3454,25 +3529,25 @@ Feed: Sistec-NuGet-Feed
 ├── Sistec.Infra.Persistence.MySql                2.0.0
 ├── Sistec.Infra.Persistence.SqlServer            2.0.0
 ├── Sistec.Infra.CodeGen                          1.0.0 (dotnet tool)
-├── Sistec.OpcUa.Library                          3.2.0
-├── Sistec.Modbus.Library                         2.1.0
-├── Sistec.Bus.Library                            1.5.0
+├── Sistec.Library.OpcUa                          3.2.0
+├── Sistec.Library.Modbus                         2.1.0
+├── Sistec.Library.Bus                            1.5.0
 │
-├── Sistec.Kuka.Stack.Client                      2.3.0
-├── Sistec.Kuka.Stack.Driver                      2.3.0       ← stessa versione
-├── Sistec.Kuka.Stack.Services                    2.3.0       ← stessa versione
-├── Sistec.Kuka.Stack.UI                          2.3.0       ← stessa versione
-├── Sistec.Kuka.Stack.Simulator                   2.3.0       ← stessa versione
+├── Sistec.Stack.Kuka.Client                      2.3.0
+├── Sistec.Stack.Kuka.Driver                      2.3.0       ← stessa versione
+├── Sistec.Stack.Kuka.Services                    2.3.0       ← stessa versione
+├── Sistec.Stack.Kuka.UI                          2.3.0       ← stessa versione
+├── Sistec.Stack.Kuka.Simulator                   2.3.0       ← stessa versione
 │
-├── Sistec.Safan.Stack.*                          2.1.0
-├── Sistec.Esa.Stack.*                            1.0.0
-├── Sistec.PLC.Stack.*                            3.0.0
-├── Sistec.Sinumerik.Stack.*                      2.0.0
-├── Sistec.Production.Stack.*                     1.2.0
-├── Sistec.JobManagement.Stack.*                  2.0.0
-├── Sistec.Maintenance.Stack.*                    1.1.0
-├── Sistec.Alarms.Stack.*                         2.0.0
-└── Sistec.Cloud.Stack.*                          1.0.0 (optional)
+├── Sistec.Stack.Safan.*                          2.1.0
+├── Sistec.Stack.Esa.*                            1.0.0
+├── Sistec.Stack.PLC.*                            3.0.0
+├── Sistec.Stack.Sinumerik.*                      2.0.0
+├── Sistec.Stack.Production.*                     1.2.0
+├── Sistec.Stack.JobManagement.*                  2.0.0
+├── Sistec.Stack.Maintenance.*                    1.1.0
+├── Sistec.Stack.Alarms.*                         2.0.0
+└── Sistec.Stack.Cloud.*                          1.0.0 (optional)
 ```
 
 ### 14.8 Trigger e Automazione
@@ -3560,7 +3635,7 @@ La pipeline CI/CD non è una fase separata: si costruisce **insieme a ogni stack
 
 ```
 Fase 1: Kuka.Stack pilota
-  ├── Codice: Sistec.Kuka.Stack.*
+  ├── Codice: Sistec.Stack.Kuka.*
   ├── Test: NUnit UnitTests + IntegrationTests + SimulatorTests
   ├── Pipeline: azure-pipelines.yml (build → test → SQ → NuGet)
   └── SonarQube: quality gate attivo
@@ -3766,7 +3841,7 @@ I layer `Services` degli stack verticali consumano interfacce definite in `Siste
 **Soluzione:** Contract Testing (Pact) per le interfacce pubbliche:
 
 ```csharp
-// Consumer (Sistec.Production.Stack) definisce il contratto
+// Consumer (Sistec.Stack.Production) definisce il contratto
 [Test]
 public void Production_Expects_KukaService_Contract()
 {
@@ -3793,60 +3868,127 @@ L'HMI comanda macchinari industriali. Alcuni principi aggiuntivi:
 
 ---
 
-## 16. Logging e Osservabilità
+## 16. Osservabilità
 
-La sezione 9.7 ha già descritto la migrazione dal logger statico a `ILogger<T>` via DI con output JSON. Questa sezione completa il quadro con le best practice di osservabilità a livello di sistema.
+L'osservabilità per un HMI industriale non è solo logging. Un sistema che deve funzionare 24/7 su PC industriali, spesso senza connessione di rete, deve poter essere **diagnosticato da remoto**, **monitorato automaticamente** e **analizzato a posteriori** senza intervento umano.
 
-### 16.1 Le Tre Pillar dell'Osservabilità
+La sezione §9.7 ha descritto la migrazione dal logger statico a `ILogger<T>` via DI. Questa sezione estende il quadro a tutte e 4 le dimensioni dell'osservabilità — logs, metrics, traces, health checks — più la diagnostica di campo.
 
+### 16.1 Architettura dell'Osservabilità
+
+```mermaid
+flowchart LR
+    subgraph Stacks["STACK VERTICALI"]
+        K["Sistec.Stack.Kuka"]
+        S["Sistec.Stack.Safan"]
+        P["Sistec.Stack.PLC"]
+        A["Sistec.Stack.Alarms"]
+        J["Sistec.Stack.JobMgmt"]
+        Pr["Sistec.Stack.Production"]
+    end
+
+    subgraph Observability["OSSERVABILITÀ"]
+        Logs["ILogger&lt;T&gt;<br/>JSON strutturato"]
+        Metrics["System.Diagnostics.Metrics<br/>Counter / Histogram"]
+        Traces["ActivitySource<br/>OpenTelemetry"]
+        Health["IHealthCheck<br/>Microsoft.Extensions"]
+    end
+
+    subgraph Storage["MEMORIZZAZIONE"]
+        LogFile["File JSON<br/>rotazione giornaliera"]
+        MetricsCache["Metriche in memoria<br/>esportazione periodica"]
+        TraceColl["OTLP Collector<br/>(opzionale)"]
+        HealthAgg["Health Aggregator<br/>stato composito"]
+    end
+
+    subgraph Consumatori["CONSUMATORI"]
+        Dashboard["Dashboard locale<br/>Avalonia"]
+        Cloud["Cloud.Stack<br/>MQTT / HTTP"]
+        Alert["Alerting<br/>Critical → sveglia turnista"]
+        Field["Field Diagnostics<br/>USB key / API"]
+    end
+
+    Stacks -->|ILogger| Logs
+    Stacks -->|Meter| Metrics
+    Stacks -->|Activity| Traces
+    Stacks -->|IHealthCheck| Health
+
+    Logs --> LogFile
+    Metrics --> MetricsCache
+    Traces --> TraceColl
+    Health --> HealthAgg
+
+    LogFile --> Dashboard
+    LogFile --> Field
+    MetricsCache --> Dashboard
+    MetricsCache --> Cloud
+    TraceColl --> Cloud
+    HealthAgg --> Dashboard
+    HealthAgg --> Alert
 ```
-          ┌──────────────┐
-          │ OSSERVABILITÀ │
-     ┌────┴──┬────┬───┴────┐
-     │       │    │        │
-  LOGS   METRICS  TRACES
-  (cosa   (quanto  (percorso
-  è       sta      della
-  succes- succ-   richiesta)
-  so)     edendo)
 
-Nessuna sostituisce le altre — sono complementari.
-```
+### 16.2 Structured Logging + Industrial Event Schema
 
-| Pillar | HMI Sistec | Strumento |
-|---|---|---|
-| **Logs** | Eventi: comando inviato, allarme, job completato, errore | Serilog (JSON) → Elasticsearch o file locale |
-| **Metrics** | Conteggio pezzi, tempo ciclo, connettività, uptime | App.Metrics / Prometheus (opzionale) |
-| **Traces** | Tracciamento richiesta: UI → Service → Driver → Client → PLC | OpenTelemetry (futuro) |
+Già coperto in §9.7. Riepilogo punti chiave:
 
-### 16.2 Structured Logging (Riepilogo)
-
-Già coperto in §9.7. Punti chiave:
 - Output **JSON**, non plain text
 - `ILogger<T>` via DI, non statico
 - Named placeholders `{Gripper}` non interpolazione `$"..."`
 - Configurabile via `appsettings.json`
 - Tre astrazioni unite in una sola
 
-### 16.3 Correlation ID per Sessione
+#### 16.2.1 Industrial Event Schema
 
-Ogni sessione operatore (dalla login alla logout) ha un **Trace ID** che segue tutte le operazioni:
+Ogni evento di business segue uno schema standardizzato per garantire consistenza tra stack:
 
 ```csharp
-// Middleware DI: ogni operatore ha un correlation ID
+public record IndustrialEvent(
+    string CorrelationId,       // Sessione operatore
+    string OperatorId,          // Badge operatore (se logged)
+    string MachineId,           // "Kuka_0", "Safan_1"
+    string EventType,           // "CommandSent", "JobStarted", "AlarmRaised"
+    string Category,            // "Production", "Alarm", "Maintenance", "Security"
+    IReadOnlyDictionary<string, object> Payload,
+    DateTime Timestamp
+);
+```
+
+```json
+{
+  "@t": "2026-07-02T14:30:00.123Z",
+  "@l": "Information",
+  "EventType": "CommandSent",
+  "Category": "Production",
+  "MachineId": "Kuka_0",
+  "CorrelationId": "a1b2c3d4e5f6",
+  "OperatorId": "42",
+  "Payload": {
+    "command": "LoadPanel",
+    "gripper": "vacuum_a",
+    "duration_ms": 2340
+  }
+}
+```
+
+Questo schema permette query cross-stack: "tutti gli eventi di MachineId=Kuka_0 tra le 14:00 e le 15:00".
+
+### 16.3 Correlation ID e Trace Context
+
+#### 16.3.1 Session Correlation
+
+Ogni sessione operatore (dalla login alla logout) ha un **Correlation ID** che segue tutte le operazioni:
+
+```csharp
 public class OperatorSessionMiddleware
 {
-    private readonly IHttpContextAccessor? _httpContext; // solo se web
     private readonly ILogger _logger;
 
     public void BeginSession(Employee employee)
     {
         var correlationId = Guid.NewGuid().ToString("N");
-        _logger.LogInformation("Session started: {OperatorId} {BadgeId} {CorrelationId}",
-            employee.BadgeId, employee.BadgeId, correlationId);
-        
-        // Il correlationId viene passato a ogni log nell'arco della sessione
         using var _ = _logger.BeginScope(new { CorrelationId = correlationId });
+        _logger.LogInformation("Session started: {OperatorId} {BadgeId}",
+            employee.BadgeId, employee.BadgeId);
     }
 }
 ```
@@ -3865,6 +4007,32 @@ Output:
 ```
 
 Vantaggio: si può tracciare esattamente cosa ha fatto un operatore durante il suo turno — "quale comando ha causato l'allarme?", "quanto tempo tra login e primo job?".
+
+#### 16.3.2 Trace Context Propagation
+
+Il trace context attraversa i layer dello stack (UI → Services → Driver → Client → PLC). `System.Diagnostics.Activity` gestisce il propagation automaticamente se i layer sono nello stesso processo:
+
+```csharp
+// Services layer
+public async Task ExecuteProgramAsync(string programId)
+{
+    using var activity = SistecDiagnostics.ActivitySource.StartActivity("ExecuteProgram");
+    activity?.SetTag("program.id", programId);
+
+    try
+    {
+        await _driver.ExecuteProgramAsync(programId);
+        activity?.SetStatus(ActivityStatusCode.Ok);
+    }
+    catch (Exception ex)
+    {
+        activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+        throw;
+    }
+}
+```
+
+Per chiamate cross-process (API REST a MES/ERP), il trace context va propagato via W3C TraceContext header.
 
 ### 16.4 Livelli di Log
 
@@ -3889,22 +4057,414 @@ Vantaggio: si può tracciare esattamente cosa ha fatto un operatore durante il s
 | **Dati personali (PII)** | Nome completo, email, matricola interna |
 | **Chiavi crittografiche** | Mai, in nessun formato |
 
-### 16.6 Retention Policy
+### 16.6 Health Check System
 
-I log su disco locale (PC industriale) si accumulano velocemente. Policy proposta:
+#### 16.6.1 Architettura
 
-| Criterio | Valore |
+Ogni stack implementa `IHealthCheck` da `Microsoft.Extensions.Diagnostics.HealthChecks`. Il Composition Root aggrega tutti gli health check in un cruscotto unificato:
+
+```mermaid
+flowchart LR
+    subgraph Stacks["HEALTH CHECKS PER STACK"]
+        KUKA["KukaHealthCheck<br/>Ping KRC TCP"]
+        SAFAN["SafanHealthCheck<br/>Stato connessione pressa"]
+        PLC["PlcHealthCheck<br/>OPC UA session state"]
+        DB["DbHealthCheck<br/>SELECT 1 su MySQL"]
+        ALARM["AlarmHealthCheck<br/>Alarm flood detector"]
+    end
+
+    AGG["HealthAggregator<br/>Composizione risultati"]
+    DASH["Dashboard locale<br/>Avalonia HealthPage"]
+    ALERT["Alert engine<br/>Critical → azione immediata"]
+
+    KUKA --> AGG
+    SAFAN --> AGG
+    PLC --> AGG
+    DB --> AGG
+    ALARM --> AGG
+    AGG --> DASH
+    AGG --> ALERT
+```
+
+#### 16.6.2 Implementazione
+
+```csharp
+public class KukaHealthCheck : IHealthCheck
+{
+    private readonly IKrcClient _krcClient;
+
+    public async Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context, CancellationToken ct)
+    {
+        try
+        {
+            bool connected = await _krcClient.PingAsync(ct);
+            return connected
+                ? HealthCheckResult.Healthy()
+                : HealthCheckResult.Unhealthy("KUKA KRC not reachable");
+        }
+        catch (Exception ex)
+        {
+            return HealthCheckResult.Unhealthy("KUKA check failed", ex);
+        }
+    }
+}
+
+public static IServiceCollection AddHealthChecks(this IServiceCollection services)
+{
+    services.AddHealthChecks()
+        .AddCheck<KukaHealthCheck>("KUKA", tags: ["kuka", "robot"])
+        .AddCheck<SafanHealthCheck>("Safan", tags: ["press", "critical"])
+        .AddCheck<PlcHealthCheck>("PLC", tags: ["plc", "critical"])
+        .AddCheck<DbHealthCheck>("Database", tags: ["infra"])
+        .AddCheck<AlarmHealthCheck>("Alarms", tags: ["alarm"]);
+
+    return services;
+}
+```
+
+#### 16.6.3 Health Status Mapping
+
+| Stato | Colore | Azione |
+|---|---|---|
+| **Healthy** | Verde | Normale operatività |
+| **Degraded** | Giallo | Performance ridotta, ma operativo |
+| **Unhealthy** | Rosso | Componente non funzionante → alert |
+
+Il mapping è esposto nella dashboard locale e via API REST (`GET /api/v1/health`).
+
+**Riferimento codebase:** `ReconnectAgent.cs`, `KrcClient.cs`, `ModbusConnector.cs`, `OpcUaClient.cs` — nessuno implementa health check standardizzato.
+
+### 16.7 Metrics
+
+#### 16.7.1 Per-Stack Counters
+
+Ogni stack espone metriche via `System.Diagnostics.Metrics`. FAEL referenzia già `System.Diagnostics.DiagnosticSource 10.0.6` in `Directory.Packages.props:29` ma non lo usa.
+
+```csharp
+public static class SistecMetrics
+{
+    public static readonly Meter ProductionMeter = new("Sistec.Production", "1.0.0");
+
+    public static readonly Counter<int> PartsProduced =
+        ProductionMeter.CreateCounter<int>("parts.produced",
+            description: "Pezzi prodotti");
+
+    public static readonly Histogram<double> CycleTime =
+        ProductionMeter.CreateHistogram<double>("cycle.time_ms",
+            unit: "ms", description: "Tempo ciclo per pezzo");
+
+    public static readonly Counter<int> CommandsSent =
+        ProductionMeter.CreateCounter<int>("commands.sent",
+            description: "Comandi inviati ai macchinari");
+}
+
+// Uso in Production.Stack
+public async Task RecordPartProduced(string machineId, double cycleTimeMs)
+{
+    SistecMetrics.PartsProduced.Add(1,
+        new KeyValuePair<string, object?>("machine", machineId));
+    SistecMetrics.CycleTime.Record(cycleTimeMs,
+        new KeyValuePair<string, object?>("machine", machineId));
+}
+
+Con Redis opzionale, i contatori produzione usano `INCR` atomico su `sistec:{plant}:production:{counter}` (es. `parts.produced`, `scrap.count`). Due pannelli che producono simultaneamente non generano race condition. Il valore Redis viene flushato su MySQL periodicamente. La dashboard web (§19.12) legge contatori in tempo reale da Redis senza impattare il DB.
+```
+
+#### 16.7.2 Metriche Raccomandate per Stack
+
+| Stack | Metriche | Frequenza |
+|---|---|---|
+| **Kuka** | `commands.sent`, `command.latency_ms`, `connection.state` (0/1) | Per comando |
+| **PLC** | `tags.read_count`, `tags.write_count`, `session.age_sec` | 1s |
+| **Production** | `parts.produced`, `cycle.time_ms`, `scrap.count` | Per evento |
+| **JobMgmt** | `jobs.completed`, `jobs.failed`, `jobs.duration_ms` | Per job |
+| **Alarms** | `alarms.raised`, `alarms.ack_time_ms` | Per allarme |
+| **System** | `memory.mb`, `cpu.percent`, `disk.free_mb` | 10s |
+
+#### 16.7.3 Esportazione
+
+Le metriche sono esposte in due modalità:
+
+1. **Locale** — accessibili via API REST (`GET /api/v1/metrics`) per la dashboard HMI interna
+2. **Cloud** — se presente `Sistec.Stack.Cloud`, esportate via OpenTelemetry Protocol (OTLP) o Prometheus scraping
+
+```json
+{
+  "Metrics": {
+    "ExportMode": "Local",
+    "OtlpEndpoint": "",
+    "OtlpHeaders": {},
+    "LocalPort": 5001
+  }
+}
+```
+
+**Riferimento codebase:** `Sistec.Core/Utils/PropertyNotifier.cs` già notifica cambi valore — punto di hook naturale per metriche senza modificare i consumer.
+
+### 16.8 Distributed Tracing
+
+#### 16.8.1 OpenTelemetry Integration
+
+```csharp
+public static class SistecDiagnostics
+{
+    public static readonly ActivitySource ActivitySource = new("Sistec", "1.0.0");
+}
+```
+
+Ogni operazione cross-stack (UI → Services → Driver → Client → PLC) è un trace:
+
+```csharp
+public async Task ExecuteProgramAsync(string programId)
+{
+    using var activity = SistecDiagnostics.ActivitySource.StartActivity(
+        ActivityKind.Internal,
+        tags: new[] {
+            KeyValuePair.Create<string, object?>("program.id", programId),
+            KeyValuePair.Create<string, object?>("machine.type", "Safan")
+        });
+
+    try
+    {
+        await _safanClient.ExecuteProgramAsync(programId);
+        activity?.SetStatus(ActivityStatusCode.Ok);
+    }
+    catch (Exception ex)
+    {
+        activity?.SetStatus(ActivityStatusCode.Error);
+        activity?.SetTag("error.message", ex.Message);
+        throw;
+    }
+}
+```
+
+#### 16.8.2 Span Naming Convention
+
+```
+{stack}.{layer}.{operation}
+  kuka.driver.loadPanel
+  safan.client.executeProgram
+  plc.services.readTags
+  production.services.recordPart
+```
+
+#### 16.8.3 OTLP Collector Deployment
+
+Il collector OpenTelemetry è **opzionale**. Sul PC industriale, si deploya come container Docker o processo Windows separato:
+
+```yaml
+# otel-collector-config.yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch:
+    timeout: 1s
+  memory_limiter:
+    limit_mib: 256
+
+exporters:
+  logging:
+    loglevel: warn
+  otlp:
+    endpoint: "cloud-collector:4317"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [logging, otlp]
+```
+
+### 16.9 Diagnostics Mode
+
+Gli operatori di campo (collaudatori, manutentori Sistec) hanno bisogno di diagnostica **senza deployare una build speciale**.
+
+#### 16.9.1 Implementazione
+
+```csharp
+public enum DiagnosticsLevel
+{
+    None,       // Produzione normale — solo INFORMATION+
+    Basic,      // + DEBUG per stack specifici
+    Verbose,    // + TRACE per tutto
+    CrashDump   // Cattura minidump su crash
+}
+
+public class DiagnosticsService
+{
+    private DiagnosticsLevel _level = DiagnosticsLevel.None;
+
+    public void SetLevel(DiagnosticsLevel level, string? stackFilter = null)
+    {
+        _level = level;
+        var switch = new LoggingLevelSwitch
+        {
+            MinimumLevel = level switch
+            {
+                DiagnosticsLevel.Verbose => LogEventLevel.Verbose,
+                DiagnosticsLevel.Basic   => LogEventLevel.Debug,
+                _                        => LogEventLevel.Information
+            }
+        };
+    }
+}
+```
+
+#### 16.9.2 Attivazione
+
+| Metodo | Come |
 |---|---|
-| **Retention hot** | 30 giorni (accesso rapido per diagnostica) |
-| **Retention cold** | 1 anno (compresso, su NAS/cloud) |
-| **Rotazione** | Giornaliera (`rollingInterval: Day`) |
-| **Dimensione massima** | 500 MB per file |
-| **Pulizia automatica** | Cancella log più vecchi di 30 giorni |
-| **Cloud (opzionale)** | Se Cloud.Stack presente, invia log critici a Elasticsearch |
+| **File flag** | `diagnostics.ls` nella directory app (come `loginSistec.ls`) |
+| **API REST** | `POST /api/v1/diagnostics/level { "level": "Verbose" }` (autenticata) |
+| **USB key** | Inserendo USB Sistec-DIAG → abilita diagnostics e scrive log sulla USB |
+| **Remote** | Via Cloud.Stack, se configurato |
 
-### 16.7 8 Best Practice del Monitoring
+#### 16.9.3 Cosa Produce
 
-Basate sulle checklist delle lezioni, adattate per HMI industriale:
+- Log JSON a livello DEBUG/TRACE
+- Minidump su crash (configurabile: full o mini)
+- Snapshot metriche in memoria
+- Health check report completo
+- Network dump dei protocolli attivi (TCP/Modbus/OPC UA)
+
+### 16.10 Dead Man's Switch e Self-Diagnostics
+
+#### 16.10.1 Heartbeat
+
+Ogni stack produce un heartbeat periodico. Se manca per più del timeout, scatta allarme:
+
+```csharp
+public class HeartbeatService : BackgroundService
+{
+    private readonly ILogger<HeartbeatService> _logger;
+    private readonly IHealthAggregator _health;
+    private readonly TimeSpan _interval = TimeSpan.FromSeconds(30);
+
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            await Task.Delay(_interval, ct);
+            var status = await _health.GetCompositeStatusAsync(ct);
+            _logger.LogInformation("Heartbeat: {Status} {Timestamp:R}",
+                status, DateTime.UtcNow);
+
+            if (status == CompositeHealthStatus.Unhealthy)
+                _logger.LogCritical("System unhealthy: {Report}",
+                    await _health.GetReportAsync(ct));
+        }
+    }
+}
+```
+
+#### 16.10.2 Self-Diagnostics Checklist
+
+All'avvio, l'HMI esegue self-diagnostics:
+
+1. `IHealthCheck` di ogni stack — tutti Healthy?
+2. Disco — spazio sufficiente per log e DB?
+3. Memoria — RAM ≥ requisito minimo?
+4. Connessioni — KUKA, pressa, PLC raggiungibili?
+5. Database — MySQL accessibile e schema aggiornato?
+6. Certificati — OPC UA, HTTPS non scaduti?
+
+Risultato: report JSON salvato in `startup.diagnostics.json`, visibile in dashboard.
+
+### 16.11 SLO/SLI
+
+| SLI | SLO | Misura |
+|---|---|---|
+| **Uptime HMI** | ≥ 99.5% (99.9% target) | Processo HMI attivo / tempo totale |
+| **Command latency** | p95 ≤ 500ms | Tempo UI → risposta macchina |
+| **Tag read freshness** | ≤ 100ms | Tempo tra lettura PLC e UI aggiornata |
+| **Alarm notification** | p99 ≤ 2s | Tempo tra evento e UI alarm banner |
+| **Crash frequency** | ≤ 1/30 giorni | Crash non dovuti a HW |
+
+### 16.12 Crash Dump Strategy
+
+Il PC industriale deve continuare a funzionare anche dopo un crash:
+
+```csharp
+public class CrashHandler
+{
+    public void Attach()
+    {
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            var dumpPath = Path.Combine(
+                AppContext.BaseDirectory, "crashdumps",
+                $"crash_{DateTime.UtcNow:yyyyMMdd_HHmmss}.dmp");
+
+            Directory.CreateDirectory(Path.GetDirectoryName(dumpPath)!);
+            MiniDumpWriter.Write(dumpPath, MiniDumpType.WithDataSegs);
+
+            _logger.LogCritical("Crash: {Exception}, dump: {Path}",
+                args.ExceptionObject, dumpPath);
+
+            if (args.IsTerminating)
+                RestartApplication();
+        };
+    }
+}
+```
+
+| Aspetto | Dettaglio |
+|---|---|
+| **Dump type** | Minidump con data segments |
+| **Retention** | Ultimi 10 crash dump, cancella i più vecchi |
+| **Auto-restart** | Servizio Windows `FailureAction` = Restart |
+| **Cloud** | Se configurato, upload dump → cloud storage |
+| **Security** | Cifrare dump prima di upload (può contenere dati sensibili) |
+
+### 16.13 Log-Alarm Correlation
+
+Ogni allarme in `Sistec.Stack.Alarms` è correlato ai log tramite `CorrelationId`:
+
+```csharp
+public record AlarmEvent(
+    string Id,
+    string CorrelationId,     // ← link ai log
+    DateTime RaisedAt,
+    // ...
+);
+```
+
+Flusso di diagnostica:
+1. Operatore segnala allarme X
+2. Dashboard: `alarms/{id}` → mostra log correlati
+3. Filtro per `CorrelationId` → tutti gli eventi prima/dopo l'allarme
+4. Si identifica la causa radice
+
+### 16.14 Retention Policy
+
+| Criterio | Logs | Metrics | Traces | Crash Dump |
+|---|---|---|---|---|
+| **Retention hot** | 30 giorni | 7 giorni | 1 ora | 30 giorni |
+| **Retention cold** | 1 anno | 3 mesi (aggregate) | — | 1 anno |
+| **Rotazione** | Giornaliera | Sovrascrittura | Sovrascrittura | Per evento |
+| **Dimensione max** | 500 MB per file | 50 MB per snapshot | 100 MB buffer | 100 MB per dump |
+
+**Cloud (opzionale):** se Cloud.Stack presente, invia log critici e metriche aggregate a Elasticsearch / Prometheus.
+
+### 16.15 Performance Budget
+
+| Operazione | Target | Budget | Oltre budget |
+|---|---|---|---|
+| Comando KUKA → risposta | ≤ 300ms | DEBUG | WARNING |
+| Lettura tag PLC → UI | ≤ 100ms | DEBUG | WARNING |
+| Scrittura tag PLC | ≤ 50ms | DEBUG | WARNING |
+| Login operatore | ≤ 1s | INFORMATION | WARNING |
+| Salvataggio job DB | ≤ 200ms | INFORMATION | WARNING |
+
+Il budget è monitorato dalle metriche (`command.latency_ms`) e visibile in dashboard.
+
+### 16.16 8 Best Practice del Monitoring
 
 1. **Partire dall'esperienza utente** — Monitorare prima cosa vede l'operatore (latenza comandi, errori UI, risposta KUKA), poi l'infrastruttura
 2. **Allertamento a strati** — Critical (sveglia turnista): HMI offline, KUKA disconnesso. Warning (Slack): riconnessione, buffer in crescita. Info (dashboard): uptime, pezzi/h
@@ -3912,7 +4472,7 @@ Basate sulle checklist delle lezioni, adattate per HMI industriale:
 4. **Soglie significative** — Basare allarmi su dati storici, non su valori arbitrari. Se il tempo ciclo medio è 12s, allarmare a 18s (50% sopra), non a 30s
 5. **Correlazione con i deploy** — Annotare ogni deploy sulla dashboard. La maggior parte degli incidenti è causata da modifiche al sistema
 6. **Monitorare il monitoring** — Dead man's switch: se l'agente di logging non invia heartbeat per 5 minuti, allarme
-7. **Pianificare i costi** — Retention policy, compressione, archiviazionè. Non pagare per log inutili
+7. **Pianificare i costi** — Retention policy, compressione, archiviazione. Non pagare per log inutili
 8. **Dashboard per ruolo** — Operatore: produzione, scarti. Manutenzione: allarmi, RUL. Manager: OEE, trend
 
 ---
@@ -4508,28 +5068,13 @@ Tempo stimato: **3-4 settimane**, da eseguire in parallelo agli stack applicativ
 
 L'analisi approfondita delle codebase LAG e FAEL ha rivelato ulteriori aree di miglioramento non coperte nelle sezioni precedenti. Questa sezione raccoglie idee complementari all'architettura a stack verticali, verificate sul codice esistente.
 
-### 19.1 Health Checks + Circuit Breaker (Resilienza)
+### 19.1 Circuit Breaker (Resilienza)
 
-Oggi: `ReconnectAgent.cs` (`Sistec.Core/Utils/ReconnectAgent.cs:24`) ha timeout 10.000ms hardcoded e retry lineare. **Nessun health check endpoint, nessun circuit breaker.** Le classi di rete (`TcpClient`, `KrcClient`, `ModbusConnector`) espongono solo `IsConnected` booleano sparso.
+Oggi: `ReconnectAgent.cs` (`Sistec.Core/Utils/ReconnectAgent.cs:24`) ha timeout 10.000ms hardcoded e retry lineare. **Nessun circuit breaker.** Le classi di rete (`TcpClient`, `KrcClient`, `ModbusConnector`) espongono solo `IsConnected` booleano sparso.
 
-**Proposta:** Ogni stack implementa `IHealthCheck` (da `Microsoft.Extensions.Diagnostics.HealthChecks`). Il Composition Root aggrega tutti gli health check in un cruscotto unificato. `ReconnectAgent` viene sostituito da Polly con `CircuitBreakerPolicy` + `RetryPolicy` + `FallbackPolicy`:
+**Proposta:** Sostituire `ReconnectAgent` con Polly `CircuitBreakerPolicy` + `RetryPolicy` + `FallbackPolicy`. Health check system spostato in §16.6.
 
-```csharp
-// Health check per Kuka.Stack
-public class KukaHealthCheck : IHealthCheck
-{
-    public async Task<HealthCheckResult> CheckHealthAsync(
-        HealthCheckContext context, CancellationToken ct)
-    {
-        bool connected = await _krcClient.PingAsync(ct);
-        return connected
-            ? HealthCheckResult.Healthy()
-            : HealthCheckResult.Unhealthy("KUKA KRC not reachable");
-    }
-}
-```
-
-**Riferimento codebase:** `ReconnectAgent.cs`, `KrcClient.cs`, `ModbusConnector.cs`, `OpcUaClient.cs` — nessuno implementa health check standardizzato.
+**Riferimento codebase:** `ReconnectAgent.cs`, `KrcClient.cs`, `ModbusConnector.cs`, `OpcUaClient.cs` — nessuno implementa circuit breaker standardizzato.
 
 ---
 
@@ -4627,30 +5172,9 @@ public class KukaRobotLogic
 
 ### 19.5 Metrics e Distributed Tracing (Osservabilità)
 
-La sezione §16 copre il logging strutturato (JSON, `ILogger<T>`, Correlation ID), ma **non copre metriche e tracing**. Le codebase hanno solo Serilog per logging, zero metriche `System.Diagnostics.Metrics`.
+**Il contenuto di questa sezione è stato spostato in §16.7 (Metrics) e §16.8 (Distributed Tracing).** La presente sezione è mantenuta come riferimento per i codebase LAG/FAEL.
 
-FAEL referenzia già `System.Diagnostics.DiagnosticSource 10.0.6` in `Directory.Packages.props:29` ma non lo usa in codice.
-
-**Proposta:**
-
-```csharp
-// Metrics — conteggi produzione
-private static readonly Meter SistecMeter = new("Sistec.Production", "1.0.0");
-private static readonly Counter<int> PartsProduced = SistecMeter.CreateCounter<int>("parts.produced");
-
-// Tracing — tracciamento richiesta UI → Services → Driver → Client → PLC
-using var activity = SistecActivitySource.StartActivity("BendProgram");
-activity?.SetTag("program.id", programId);
-activity?.SetTag("press.type", "Safan");
-
-await _safan.ExecuteProgram(programId);
-
-activity?.SetStatus(ActivityStatusCode.Ok);
-```
-
-**Esportazione:** OpenTelemetry Protocol (OTLP) a un collector locale sul PC industriale. Opzionale, attivabile via config.
-
-**Riferimento codebase:** `Directory.Packages.props:29` (FAEL, `DiagnosticSource` già presente); `Sistec.Core/Utils/PropertyNotifier.cs` già notifica cambi valore — punto di hook naturale per metriche.
+**Riferimento codebase:** `Directory.Packages.props:29` (FAEL, `DiagnosticSource` già presente); `Sistec.Core/Utils/PropertyNotifier.cs` già notifica cambi valore — punto di hook naturale per metriche senza modificare i consumer.
 
 ---
 
@@ -4811,11 +5335,11 @@ dotnet_diagnostic.CA2007.severity = none    # ConfigureAwait non necessario per 
 
 ---
 
-### 19.11 Inter-Panel Communication: HTTP + Redis (Alternativa a Zebus)
+### 19.11 Inter-Panel Communication: HTTP + Redis (Alternativa in Parallelo a Zebus)
 
 Oggi in FAEL, AB e C sono **due pultipite distinti** nella stesso impianto. Comunicano via Zebus (`Sistec.Bus`, Zebus 3.14.1) per scambiarsi stato produzione, job, allarmi. Zebus funziona (è in produzione) ma è un framework poco conosciuto, difficile da manutenere e diagnosticare.
 
-**Proposta:** Sostituire Zebus con **HTTP + Redis** per la comunicazione inter-pannello.
+**Proposta:** Affiancare **HTTP + Redis** a Zebus come alternativa parallela, non sostitutiva. Ogni commessa potrà scegliere il bus più adatto o mantenerli entrambi.
 
 ```mermaid
 flowchart LR
@@ -4824,10 +5348,12 @@ flowchart LR
         BS1["Pulpito BS<br/>Form1 BS"] <-->|Zebus bus| AB1
     end
 
-    subgraph Domani["DOMANI — HTTP + Redis"]
+    subgraph Domani["DOMANI — Zebus + Redis opzionale"]
         AB2["Pulpito AB"] <-->|HTTP REST / SSE| Redis["REDIS<br/>(Stato condiviso<br/>Job, Allarmi,<br/>Produzione)"]
         C2["Pulpito C"] <-->|HTTP REST / SSE| Redis
         BS2["Pulpito BS"] <-->|HTTP REST / SSE| Redis
+        AB2 <-->|Zebus bus| C2
+        BS2 <-->|Zebus bus| AB2
     end
 ```
 
@@ -4914,9 +5440,9 @@ protected override async Task ExecuteAsync(CancellationToken ct)
 
 Se il heartbeat scade, gli altri pannelli sanno che il pannello è offline e possono mostrare un warning.
 
-#### Vantaggi rispetto a Zebus
+#### Confronto: Zebus vs HTTP + Redis
 
-| Aspetto | Zebus (oggi) | HTTP + Redis (domani) |
+| Aspetto | Zebus | HTTP + Redis |
 |---|---|---|
 | **Framework** | Zebus 3.14.1 (nicchia) | `stackexchange.redis` (standard industry, 900M+ download) |
 | **Logging** | log4net (#1597) | Serilog (unificato con tutto il resto) |
@@ -4926,17 +5452,26 @@ Se il heartbeat scade, gli altri pannelli sanno che il pannello è offline e pos
 | **Velocità** | 1-5ms (serializzazione Zebus) | <1ms (Redis in-memory, protocollo binario RESP) |
 | **Debug** | Source non disponibile | Open source, tooling maturo (RedisInsight, redis-cli) |
 | **Operazioni** | Zero visibilità | `redis-cli INFO`, `redis-cli SLOWLOG`, metriche esportabili |
+| **Dipendenza esterna** | Nessuna (libreria embedded) | Servizio Redis dedicato da installare e monitorare |
+| **Resilienza** | Peer-to-peer, nessun SPOF | Punto centrale di guasto (se Redis cade, tutto si ferma) |
+| **Complessità** | NuGet → funziona | Redis + password + persistenza + HA opzionale |
 
-#### Migrazione graduale
+#### Quando Scegliere Cosa
+
+| Scenario | Scelta |
+|---|---|
+| Commessa semplice, 2 pannelli, vuoi zero configurazione | Zebus |
+| Multi-pannello (3+), vuoi diagnostica e monitoring | HTTP + Redis |
+| Impianto critico, tolleranza guasti massima | Entrambi attivi (Zebus primario, Redis fallback) |
+
+#### Attivazione in Parallelo
 
 ```
 Fase 1: Redis side-by-side   — Zebus continua, Redis si aggiunge in lettura
-Fase 2: Doppia scrittura    — Ogni evento va sia a Zebus che a Redis
-Fase 3: Lettura da Redis    — I pannelli leggono da Redis, Zebus solo come fallback
-Fase 4: Rimozione Zebus     — Quando tutti i pannelli sono migrati
+Fase 2: Doppia scrittura    — Ogni evento va sia a Zebus che a Redis (opzionale, solo se servono entrambi)
 ```
 
-La migrazione non blocca la produzione: si può mantenere Zebus attivo per mesi mentre Redis viene introdotto gradualmente.
+Redis si attiva senza mai disabilitare Zebus. Ogni commessa sceglie la configurazione al deploy.
 
 **Riferimento codebase:** `D:\DEV\5309_FAEL\Sistec.Bus\` (15 file, log4net + Zebus 3.14.1); `Sistec.HMI\Common\Bus.cs` (227 righe) — wrapper Zebus con SafeInvoke.
 
@@ -5067,6 +5602,62 @@ Il confine è netto: **l'HMI comanda, la dashboard osserva**. Questo garantisce 
 
 ---
 
+### 19.13 Redis come Data Layer Trasversale
+
+Oltre alla comunicazione inter-pannello (§19.11), Redis può funzionare da **hot data layer condiviso** tra tutti gli stack verticali: stato veloce, notifiche real-time, contatori atomici. MySQL resta source of truth. Redis è un cache/distributed state layer che migliora performance e consistenza multi-pannello senza sostituire il DB.
+
+#### Schema Chiavi
+
+```
+sistec:{plant}:{domain}:{entity}:{id}
+```
+
+| Dominio | Key Pattern | TTL | Uso |
+|---|---|---|---|
+| **Sessioni** | `sistec:{plant}:session:{badge}` | 30m | Operatore loggato visibile su tutti i pannelli |
+| **Allarmi attivi** | `sistec:{plant}:alarms:{id}` | ∞ (fino ack/shelve) | Stato allarme condiviso, shelving con TTL |
+| **Contatori produzione** | `sistec:{plant}:production:{counter}` | ∞ | `INCR` atomico, nessuna race multi-pannello |
+| **Pallet** | `sistec:{plant}:pallet:{id}` | 24h | Stato pallet in-memory, ripresa veloce post-crash |
+| **Traduzioni** | `sistec:{plant}:i18n:{key}` | 1h | Cache distribuita, refresh automatico via TTL |
+| **Ricette** | `sistec:{plant}:recipe:{id}` | ∞ | Cache ricette, evita read DB a ogni ciclo |
+| **Metriche real-time** | `sistec:{plant}:metrics:*` | 5m | Sliding window per alarm rate, OEE, flood detection |
+| **Config override** | `sistec:{plant}:config:{key}` | variabile | Hot-reload parametri propagato a tutti i pannelli |
+| **OT/IT buffer** | `sistec:{plant}:cloud:stream` | ∞ (RDB/AOF) | Redis Streams come buffer eventi prima di MQTT |
+
+#### Cosa Cambia
+
+| Aspetto | Oggi (solo MySQL) | Con Redis |
+|---|---|---|
+| **Contatore pezzi** | `UPDATE ... SET counter = counter + 1` con lock | `INCR` atomico, zero lock, zero race |
+| **Allarme attivo su AB** | Solo AB lo vede finché non fa refresh | Pub/Sub → tutti i pannelli notificati in tempo reale |
+| **Cache traduzioni** | SQLite locale per pannello, sync periodico | Redis condiviso, update immediato, TTL per refresh |
+| **Sessione operatore** | Solo sul pannello dove ha badgeato | Visibile su tutti i pannelli, auto-logout centralizzato |
+| **Stato pallet** | Solo in memoria del processo | Redis Hash, ripresa immediata se HMI riavvia |
+| **Override configurazione** | Riavvio HMI per applicare | Pub/Sub → cambio runtime senza riavvio |
+| **Eventi verso cloud** | Coda SQLite locale | Redis Streams persistente, consumer groups, ripartenza senza perdita |
+
+#### Libreria di Supporto
+
+```
+Sistec.Library.Redis
+├── RedisPanelState.cs          — heartbeat + stato pannello
+├── RedisSessionStore.cs        — session store operatore
+├── RedisAlarmStore.cs          — stato allarmi condiviso
+├── RedisProductionCounter.cs   — INCR contatori atomici
+├── RedisPalletStore.cs         — Hash stato pallet
+├── RedisCloudBuffer.cs         — Streams per eventi cloud
+├── RedisConfigWatcher.cs       — Pub/Sub per hot-reload configurazione
+└── RedisI18nCache.cs           — cache traduzioni TTL
+```
+
+La libreria è **opzionale** — ogni commessa decide quali moduli Redis attivare. I servizi cadono graceful su MySQL se Redis non è configurato (`NullObject pattern`).
+
+**NuGet:** `stackexchange.redis` (900M+ download, standard industry)
+**Configurazione:** `redis.json` — endpoint, porta, password, DB index
+**Pattern di connessione:** `ConnectionMultiplexer` singleton, DI container
+
+---
+
 ### Riepilogo Impatto sulla Roadmap
 
 | Idea | Dove si inserisce | Sforzo | Priorità |
@@ -5081,7 +5672,8 @@ Il confine è netto: **l'HMI comanda, la dashboard osserva**. Questo garantisce 
 | System.Threading.Channels | Fase 1 (fondazioni) | 1gg | Bassa |
 | Sistec.Modbus cleanup | Immediato | 1gg | Media |
 | Standardizzazione (net8.0, serializzazione, .editorconfig) | Fase 1 (fondazioni) | 3-5gg | Media |
-| HTTP + Redis (inter-panel) | Fase 3 (applicativi) | 1-2 settimane | Alta (sostituisce Zebus) |
+| HTTP + Redis (inter-panel) | Fase 3 (applicativi) | 1-2 settimane | Alta (alternativa parallela a Zebus) |
+| Redis Data Layer (sessioni, allarmi, pallet, traduzioni, contatori) | Fase 3 (applicativi) | 2-3 settimane | Media (alto valore trasversale) |
 | Web Dashboard (React) | Fase 3 (applicativi) | 2-3 settimane | Media (alto valore) |
 
 ---
@@ -5211,7 +5803,7 @@ I 5 principi di Norman definiscono le fondamenta dell'interazione uomo-macchina.
 **Implementazione nei controlli interattivi — esempio per KUKA:**
 
 ```csharp
-// Sistec.Kuka.Stack.Services — espone stati vincolati
+// Sistec.Stack.Kuka.Services — espone stati vincolati
 public interface IKukaRobotState
 {
     bool CanStart { get; }
@@ -5387,7 +5979,7 @@ Livello 2: Dettaglio (dialog modale)
 **Implementazione MVVM — modello per ogni Stack.UI:**
 
 ```csharp
-// Sistec.Kuka.Stack.UI/ViewModels/KukaInfoViewModel.cs
+// Sistec.Stack.Kuka.UI/ViewModels/KukaInfoViewModel.cs
 public partial class KukaInfoViewModel : ObservableObject
 {
     private readonly IKukaRobotState _robotState;
@@ -5649,13 +6241,13 @@ Implementazione:
 
 ## 22. Integrazione AI nel Sistema HMI
 
-L'architettura a stack verticali è già predisposta per l'integrazione di intelligenza artificiale. Il documento prevede già `OnnxRuntimeEngine` per predictive maintenance (§9.6) e `Sistec.Cloud.Stack` per analytics cloud (§13.6). Questa sezione espande il quadro con un layer AI dedicato che si aggancia naturalmente all'esistente.
+L'architettura a stack verticali è già predisposta per l'integrazione di intelligenza artificiale. Il documento prevede già `OnnxRuntimeEngine` per predictive maintenance (§9.6) e `Sistec.Stack.Cloud` per analytics cloud (§13.6). Questa sezione espande il quadro con un layer AI dedicato che si aggancia naturalmente all'esistente.
 
 ### 22.1 Architettura del Layer AI
 
 ```mermaid
 flowchart TB
-    subgraph AI_Stack["Sistec.AI.Stack (NuGet, opzionale)"]
+    subgraph AI_Stack["Sistec.Stack.AI (NuGet, opzionale)"]
         direction TB
         CLI_AI["Client/AI<br/>OnnxInferenceEngine<br/>LlmClient (locale/cloud)"]
         DRV_AI["Driver/AI<br/>IModelRegistry<br/>IPromptTemplate"]
@@ -5665,14 +6257,14 @@ flowchart TB
     end
 
     subgraph Stacks_Esistenti["STACK ESISTENTI"]
-        Kuka["Sistec.Kuka.Stack<br/>IMachineTelemetryProvider"]
-        Safan["Sistec.Safan.Stack<br/>IMachineTelemetryProvider"]
-        Plc["Sistec.PLC.Stack<br/>IMachineTelemetryProvider"]
-        Prod["Sistec.Production.Stack<br/>IProductionAnalyticsService"]
-        Job["Sistec.JobManagement.Stack<br/>IJobTracker"]
-        Alarm["Sistec.Alarms.Stack<br/>IAlarmService"]
-        Maint["Sistec.Maintenance.Stack"]
-        Cloud["Sistec.Cloud.Stack"]
+        Kuka["Sistec.Stack.Kuka<br/>IMachineTelemetryProvider"]
+        Safan["Sistec.Stack.Safan<br/>IMachineTelemetryProvider"]
+        Plc["Sistec.Stack.PLC<br/>IMachineTelemetryProvider"]
+        Prod["Sistec.Stack.Production<br/>IProductionAnalyticsService"]
+        Job["Sistec.Stack.JobManagement<br/>IJobTracker"]
+        Alarm["Sistec.Stack.Alarms<br/>IAlarmService"]
+        Maint["Sistec.Stack.Maintenance"]
+        Cloud["Sistec.Stack.Cloud"]
     end
 
     subgraph Config_AI["CONFIGURAZIONE AI"]
@@ -5708,11 +6300,11 @@ flowchart TB
 
 | Layer | Progetto | Contenuto | Dipende da |
 |---|---|---|---|
-| **Client** | `Sistec.AI.Stack.Client` | `OnnxInferenceEngine` (ONNX Runtime CPU), `LlmClient` (llama.cpp locale o HTTP cloud) | — |
-| **Driver** | `Sistec.AI.Stack.Driver` | `IModelRegistry` (caricamento modelli .onnx), `IPromptTemplate` (template prompt da JSON) | `Sistec.AI.Stack.Client`, `Sistec.Core` |
-| **Services** | `Sistec.AI.Stack.Services` | `AnomalyDetector`, `AlarmAnalyzer`, `ProcessOptimizer`, `OperatorAssistant`, `DocumentGenerator` | `Sistec.AI.Stack.Driver`, tutti gli stack macchina (via interfacce) |
-| **UI** | `Sistec.AI.Stack.UI` | `AiInsightsPanel` (sidebar), `NaturalLanguageQuery` (barra ricerca) | `Sistec.AI.Stack.Services`, `Sistec.Controls` |
-| **Simulator** | `Sistec.AI.Stack.Simulator` | `AiSimulator` (scenari what-if su dati storici) | `Sistec.AI.Stack.Client` |
+| **Client** | `Sistec.Stack.AI.Client` | `OnnxInferenceEngine` (ONNX Runtime CPU), `LlmClient` (llama.cpp locale o HTTP cloud) | — |
+| **Driver** | `Sistec.Stack.AI.Driver` | `IModelRegistry` (caricamento modelli .onnx), `IPromptTemplate` (template prompt da JSON) | `Sistec.Stack.AI.Client`, `Sistec.Core` |
+| **Services** | `Sistec.Stack.AI.Services` | `AnomalyDetector`, `AlarmAnalyzer`, `ProcessOptimizer`, `OperatorAssistant`, `DocumentGenerator` | `Sistec.Stack.AI.Driver`, tutti gli stack macchina (via interfacce) |
+| **UI** | `Sistec.Stack.AI.UI` | `AiInsightsPanel` (sidebar), `NaturalLanguageQuery` (barra ricerca) | `Sistec.Stack.AI.Services`, `Sistec.Controls` |
+| **Simulator** | `Sistec.Stack.AI.Simulator` | `AiSimulator` (scenari what-if su dati storici) | `Sistec.Stack.AI.Client` |
 
 ### 22.3 Caso d'Uso 1: Operator Assistant (Linguaggio Naturale)
 
@@ -5945,12 +6537,12 @@ Il PC industriale (Celeron/ARM) esegue inferenza ONNX locale. Nessun dato produz
 ```
 PC Industriale
 ├── HMI.exe (Avalonia)
-├── Sistec.AI.Stack.dll
+├── Sistec.Stack.AI.dll
 │   ├── models/*.onnx              ← modelli leggeri (<50MB per anomaly/predictive)
 │   ├── prompts/*.json             ← template prompt per LLM
 │   ├── OnnxInferenceEngine        ← ONNX Runtime (CPU, no GPU richiesta)
 │   └── LlmClient (opzionale)     ← llama.cpp per NLU + generazione locale
-└── Sistec.Cloud.Stack.dll (opzionale)
+└── Sistec.Stack.Cloud.dll (opzionale)
     └── CloudModelUpdater          ← scarica modelli aggiornati da cloud
 ```
 
@@ -5974,9 +6566,9 @@ L'layer AI si aggancia ai componenti già definiti:
 | `IProductionAnalyticsService` (§12.4) | Process optimizer + operator assistant |
 | `IAlarmService` | Alarm analyzer |
 | `IJobTracker` | Process optimizer + operator assistant |
-| `Sistec.Cloud.Stack` (§13.6) | CloudModelUpdater + export analytics |
+| `Sistec.Stack.Cloud` (§13.6) | CloudModelUpdater + export analytics |
 | `layout.json` (§8) | `AiInsightsPanel` registrato nel `ControlRegistry` |
-| `Sistec.Maintenance.Stack` (§9.6) | Predizione RUL ampliata con anomaly detection |
+| `Sistec.Stack.Maintenance` (§9.6) | Predizione RUL ampliata con anomaly detection |
 | `ILogger<T>` (§9.7) | Logging query AI, audit trail suggerimenti |
 
 ### 22.10 Sicurezza — Regole Fondamentali
@@ -5996,18 +6588,18 @@ L'layer AI si aggancia ai componenti già definiti:
 
 ```
 Fase 3 (aggiornata): Stack applicativi + AI (4-5 settimane)
-  ├── Sistec.Production.Stack
-  ├── Sistec.RecipeEngine.Stack
-  ├── Sistec.PalletTracking.Stack
-  ├── Sistec.Maintenance.Stack (predictive ML ampliato §9.6)
-  ├── Sistec.AI.Stack (NUOVO)
+  ├── Sistec.Stack.Production
+  ├── Sistec.Stack.RecipeEngine
+  ├── Sistec.Stack.PalletTracking
+  ├── Sistec.Stack.Maintenance (predictive ML ampliato §9.6)
+  ├── Sistec.Stack.AI (NUOVO)
   │   ├── AnomalyDetector (Isolation Forest ONNX)        ← priorità alta
   │   ├── OperatorAssistant (NLU + query builder)          ← priorità alta
   │   ├── AlarmAnalyzer (correlation + LLM)                ← priorità media
   │   ├── ProcessOptimizer (storico + raccomandazioni)     ← priorità media
   │   ├── DocumentGenerator (report automatici)            ← priorità bassa
   │   └── AiInsightsPanel (UI Avalonia sidebar)            ← priorità alta
-  └── Sistec.JobManagement.Stack, Alarms
+  └── Sistec.Stack.JobManagement, Alarms
 
 Fase 4 (dopo deploy): Miglioramento continuo
   ├── Raccolta dati operatore su suggerimenti AI
@@ -6597,6 +7189,568 @@ Fase 4 — Deploy
 
 ---
 
+## 25. Schema Database — Persistenza Produzione, MES, Cloud e Manutenzione Predittiva
+
+Questa sezione definisce lo schema ER completo per la nuova commessa greenfield, migliorando radicalmente il design attuale (zero FK, zero indici, blob per dati strutturati, password in chiaro) e aggiungendo le tabelle necessarie per integrazione MES, analisi cloud e manutenzione predittiva.
+
+### 25.1 Principi di Design
+
+| Principio | Applicazione |
+|---|---|
+| **FK su ogni relazione** | Niente orfani. `ON DELETE RESTRICT` per dati produttivi, `ON DELETE CASCADE` per log |
+| **Indici su ogni campo di ricerca/filtro** | `WHERE`, `JOIN`, `ORDER BY`, `GROUP BY` devono essere sempre coperti da index |
+| **Niente blob per dati strutturati** | `cut_plan.Data` → tabella `cut_plan_items`. `persistent_vars.Blob` → colonne tipizzate |
+| **Timestamp ovunque** | `created_at`, `updated_at`, `synced_at` su ogni tabella per sync cloud |
+| **Partition-friendly** | Chiavi primarie con timestamp embedded per partizionamento mensile |
+| **Niente dati cloud nel DB locale** | Solo ID di riferimento + flag di sync. I dati analitici stanno nel cloud |
+| **Enum come TINYINT** | Performance + integrità. Le lookup table servono solo per configurazione variabile |
+| **Password/PIN mai in chiaro** | Solo hash + salt. `VARCHAR(256)` per BCrypt/Argon2 |
+
+### 25.2 Schema ER Completo
+
+```mermaid
+erDiagram
+    %% ── AUTH ──
+    roles {
+        int id PK
+        varchar name "Supervisore, Operatore, Manutenzione"
+        bigint permissions "Bitmask: 1=CanEditParams, 2=CanReset, 4=CanManageUsers"
+        bool is_active
+        datetime created_at
+    }
+    employees {
+        int badge_id PK "4-6 cifre, badge RFID"
+        varchar first_name
+        varchar last_name
+        tinyint shift "1=Mattina, 2=Pomeriggio, 3=Notte"
+        int role_id FK
+        varchar pin_hash
+        varchar pin_salt
+        bool is_active
+        datetime last_login
+        datetime created_at
+    }
+
+    %% ── PRODUZIONE ──
+    recipes {
+        int id PK
+        varchar program_code
+        tinyint working_mode
+        varchar robot_program
+        varchar punching_program
+        varchar bending_program
+        int punching_bay
+        int punching_items_per_sheet
+        varchar comment
+        datetime created_at
+        datetime updated_at
+    }
+    orders {
+        int id PK
+        int order_code
+        int recipe_id FK
+        int target_items_count
+        int items_completed_count
+        int scrap_items_count
+        varchar notes
+        datetime created_at
+        datetime updated_at
+    }
+    jobs {
+        int id PK
+        int order_id FK
+        int recipe_id FK
+        tinyint status "JobStatus enum: 0=Ready, 1=Running, 2=Completed..."
+        int target_items_count
+        int items_completed_count
+        int scrap_items_count
+        int operator_id FK "who started the job"
+        varchar notes
+        datetime created_at
+        datetime updated_at
+        datetime completed_at
+    }
+    job_items {
+        bigint id PK
+        int job_id FK
+        int sequence_number "1-based per job"
+        varchar item_code
+        varchar program_used
+        tinyint status "0=Pending, 1=Running, 2=Completed, 3=Scrapped"
+        datetime started_at
+        datetime completed_at
+        datetime created_at
+    }
+    production_cycles {
+        bigint id PK
+        int job_id FK
+        int job_item_id FK "nullable, NULL = setup/non-prod"
+        varchar machine_id "Kuka_0, Safan_0, Plc_0"
+        varchar cycle_type "Bend, Punch, Load, Unload, Transport, Wait"
+        int duration_ms
+        bool success
+        varchar error_code "NULL if success"
+        datetime started_at
+        datetime created_at
+    }
+
+    %% ── CUT PLAN ──
+    cut_plans {
+        int job_id PK "FK → jobs.id"
+        int plasterboard_length
+        int num_panels_per_portal
+        int num_of_panels_used
+        int scrap_into_pallet
+        int scrap_into_box
+        datetime created_at
+    }
+    cut_plan_items {
+        bigint id PK
+        int cut_plan_job_id FK
+        int sequence_number
+        int length_mm
+        int width_mm
+        tinyint type "0=Panel, 1=Scrap, 2=Waste"
+        tinyint quality "0=OK, 1=Defect, 2=Rework"
+        datetime created_at
+    }
+
+    %% ── SCRAP / QUALITY ──
+    scrap_events {
+        bigint id PK
+        int job_id FK
+        int job_item_id FK
+        tinyint scrap_type "1=Material, 2=Dimension, 3=Program, 4=Machine"
+        varchar reason
+        decimal weight_kg
+        int operator_id FK "who caused/scrapped it"
+        datetime created_at
+    }
+    piece_tracking {
+        bigint id PK
+        int job_id FK
+        int job_item_id FK
+        varchar serial_number
+        varchar qr_code
+        tinyint status "0=Produced, 1=QC_Passed, 2=QC_Failed, 3=Shipped, 4=Rework"
+        int qc_operator_id FK
+        datetime qc_timestamp
+        created_at
+    }
+
+    %% ── MANUTENZIONE PREDITTIVA ──
+    machine_components {
+        int id PK
+        varchar machine_id
+        varchar component_name "Joint_1, Cylinder_Main, Belt_Drive"
+        varchar model_file "kuka_joint_rul.onnx"
+        decimal rul_threshold_warning
+        decimal rul_threshold_critical
+        int fallback_hours "time-based schedule if ML unavailable"
+        tinyint unit "0=Hours, 1=Cycles, 2=Days"
+        bool is_active
+        datetime created_at
+    }
+    telemetry_windows {
+        bigint id PK
+        int component_id FK
+        datetime window_start "start of aggregation window"
+        datetime window_end "end of aggregation window"
+        json features "{\"avg_torque\": 12.3, \"max_temp\": 87.5, \"sum_cycles\": 150}"
+        decimal rul_predicted "NULL if no model"
+        decimal rul_confidence "0.0-1.0"
+        tinyint quality "0=Raw, 1=Validated, 2=Anomaly"
+        datetime synced_at "NULL if not synced to cloud"
+    }
+    rul_predictions {
+        bigint id PK
+        int component_id FK
+        decimal rul_hours
+        decimal confidence
+        tinyint model_version
+        json features_snapshot "features used for this prediction"
+        datetime predicted_at
+    }
+    maintenance_tasks {
+        int id PK
+        int component_id FK
+        int created_by_operator_id FK
+        varchar title
+        varchar description
+        tinyint priority "0=Low, 1=Medium, 2=High, 3=Critical"
+        tinyint source "0=TimeBased, 1=PredictiveML, 2=Manual, 3=Failure"
+        tinyint status "0=Open, 1=InProgress, 2=Completed, 3=Cancelled"
+        datetime due_at
+        datetime completed_at
+        int completed_by_operator_id FK
+        datetime created_at
+    }
+    maintenance_history {
+        bigint id PK
+        int component_id FK
+        int task_id FK "nullable"
+        int operator_id FK
+        tinyint intervention_type "0=Inspection, 1=Repair, 2=Replacement, 3=Lubrication, 4=Reset"
+        varchar notes
+        decimal cost_estimate
+        datetime performed_at
+        datetime created_at
+    }
+    component_failures {
+        bigint id PK
+        int component_id FK
+        int related_cycle_id FK "nullable, production_cycles.id"
+        varchar failure_mode "Overload, Wear, Jam, Overheat"
+        decimal downtime_hours
+        decimal repair_cost
+        tinyint root_cause "0=NormalWear, 1=OperatorError, 2=Design, 3=MaintenanceDelay"
+        datetime failed_at
+        datetime created_at
+    }
+
+    %% ── CLOUD SYNC ──
+    cloud_sync_log {
+        bigint id PK
+        varchar table_name "employees, telemetry_windows, rul_predictions..."
+        bigint record_id
+        tinyint operation "0=Insert, 1=Update, 2=Delete"
+        tinyint status "0=Pending, 1=Synced, 2=Failed"
+        int retry_count
+        varchar error_message
+        datetime created_at
+        datetime synced_at
+    }
+    plant_config {
+        varchar plant_id PK "sistec-lag-5315"
+        varchar plant_name "LAG 5315"
+        varchar cloud_endpoint "https://cloud.sistec.it/api/v1"
+        varchar mqtt_broker "192.168.1.50:1883"
+        varchar sparkplug_group "sistec"
+        tinyint sync_interval_minutes
+        datetime last_heartbeat
+        datetime created_at
+    }
+
+    %% ── RELAZIONI ──
+    roles ||--o{ employees : "has"
+    employees ||--o{ jobs : "started_by"
+    employees ||--o{ scrap_events : "caused_by"
+    employees ||--o{ piece_tracking : "qc_by"
+    employees ||--o{ maintenance_tasks : "created_by"
+    employees ||--o{ maintenance_tasks : "completed_by"
+    employees ||--o{ maintenance_history : "performed_by"
+
+    recipes ||--o{ orders : "referenced_by"
+    recipes ||--o{ jobs : "used_in"
+
+    orders ||--o{ jobs : "contains"
+
+    jobs ||--o{ job_items : "has_items"
+    jobs ||--o{ production_cycles : "has_cycles"
+    jobs ||--o{ scrap_events : "has_scraps"
+    jobs ||--o{ piece_tracking : "has_pieces"
+    jobs ||--o{ cut_plans : "has_cut_plan"
+
+    job_items ||--o{ production_cycles : "cycle_detail"
+    job_items ||--o{ scrap_events : "scrap_detail"
+    job_items ||--o{ piece_tracking : "tracking"
+
+    cut_plans ||--o{ cut_plan_items : "has_items"
+
+    machine_components ||--o{ telemetry_windows : "telemetry"
+    machine_components ||--o{ rul_predictions : "rul"
+    machine_components ||--o{ maintenance_tasks : "tasks"
+    machine_components ||--o{ maintenance_history : "history"
+    machine_components ||--o{ component_failures : "failures"
+    production_cycles ||--o{ component_failures : "failure_cycle"
+
+    maintenance_tasks ||--o{ maintenance_history : "task_execution"
+```
+
+### 25.3 DDL — Tabelle Core (MES-ready)
+
+```sql
+-- Tabella ordini con FK e indici per MES
+CREATE TABLE orders (
+    id              INT PRIMARY KEY AUTO_INCREMENT,
+    order_code      INT NOT NULL,
+    recipe_id       INT NOT NULL,
+    target_items_count INT NOT NULL DEFAULT 0,
+    items_completed_count INT NOT NULL DEFAULT 0,
+    scrap_items_count INT NOT NULL DEFAULT 0,
+    notes           VARCHAR(1023),
+    created_at      DATETIME NOT NULL DEFAULT NOW(),
+    updated_at      DATETIME NOT NULL DEFAULT NOW() ON UPDATE NOW(),
+    FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE RESTRICT,
+    INDEX idx_orders_order_code (order_code),
+    INDEX idx_orders_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Tabella job con FK a ordine, ricetta e operatore
+CREATE TABLE jobs (
+    id              INT PRIMARY KEY AUTO_INCREMENT,
+    order_id        INT NOT NULL,
+    recipe_id       INT NOT NULL,
+    status          TINYINT NOT NULL DEFAULT 0,
+    target_items_count INT NOT NULL DEFAULT 0,
+    items_completed_count INT NOT NULL DEFAULT 0,
+    scrap_items_count INT NOT NULL DEFAULT 0,
+    operator_id     INT,
+    notes           VARCHAR(1023),
+    created_at      DATETIME NOT NULL DEFAULT NOW(),
+    updated_at      DATETIME NOT NULL DEFAULT NOW() ON UPDATE NOW(),
+    completed_at    DATETIME,
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE RESTRICT,
+    FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE RESTRICT,
+    FOREIGN KEY (operator_id) REFERENCES employees(badge_id) ON DELETE SET NULL,
+    INDEX idx_jobs_status (status),
+    INDEX idx_jobs_operator (operator_id),
+    INDEX idx_jobs_created (created_at),
+    INDEX idx_jobs_order (order_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Singoli item di un job (addio blob)
+CREATE TABLE job_items (
+    id              BIGINT PRIMARY KEY AUTO_INCREMENT,
+    job_id          INT NOT NULL,
+    sequence_number INT NOT NULL,
+    item_code       VARCHAR(100),
+    program_used    VARCHAR(100),
+    status          TINYINT NOT NULL DEFAULT 0 COMMENT '0=Pending, 1=Running, 2=Completed, 3=Scrapped',
+    started_at      DATETIME,
+    completed_at    DATETIME,
+    created_at      DATETIME NOT NULL DEFAULT NOW(),
+    FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+    INDEX idx_items_job (job_id, sequence_number),
+    INDEX idx_items_status (job_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Ogni ciclo macchina registrato (analytics + OEE)
+CREATE TABLE production_cycles (
+    id              BIGINT PRIMARY KEY AUTO_INCREMENT,
+    job_id          INT NOT NULL,
+    job_item_id     BIGINT,
+    machine_id      VARCHAR(50) NOT NULL COMMENT 'Kuka_0, Safan_0, Plc_0',
+    cycle_type      VARCHAR(50) NOT NULL COMMENT 'Bend, Punch, Load, Unload, Wait',
+    duration_ms     INT NOT NULL COMMENT 'cycle time in milliseconds',
+    success         BOOLEAN NOT NULL DEFAULT TRUE,
+    error_code      VARCHAR(100),
+    started_at      DATETIME NOT NULL,
+    created_at      DATETIME NOT NULL DEFAULT NOW(),
+    FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+    FOREIGN KEY (job_item_id) REFERENCES job_items(id) ON DELETE SET NULL,
+    INDEX idx_cycles_machine (machine_id, started_at),
+    INDEX idx_cycles_job (job_id, started_at),
+    INDEX idx_cycles_type (cycle_type, started_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Singoli pezzi tagliati (addio longblob cut_plan.Data)
+CREATE TABLE cut_plan_items (
+    id              BIGINT PRIMARY KEY AUTO_INCREMENT,
+    cut_plan_job_id INT NOT NULL,
+    sequence_number INT NOT NULL,
+    length_mm       INT NOT NULL,
+    width_mm        INT NOT NULL,
+    type            TINYINT NOT NULL DEFAULT 0 COMMENT '0=Panel, 1=Scrap, 2=Waste',
+    quality         TINYINT NOT NULL DEFAULT 0 COMMENT '0=OK, 1=Defect, 2=Rework',
+    created_at      DATETIME NOT NULL DEFAULT NOW(),
+    FOREIGN KEY (cut_plan_job_id) REFERENCES cut_plans(job_id) ON DELETE CASCADE,
+    INDEX idx_cutplan_job (cut_plan_job_id, sequence_number)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+### 25.4 DDL — Manutenzione Predittiva (Wear Data per ML Cloud)
+
+```sql
+-- Catalogo componenti monitorati
+CREATE TABLE machine_components (
+    id              INT PRIMARY KEY AUTO_INCREMENT,
+    machine_id      VARCHAR(50) NOT NULL,
+    component_name  VARCHAR(100) NOT NULL,
+    model_file      VARCHAR(255) COMMENT 'kuka_joint_rul.onnx',
+    rul_threshold_warning DECIMAL(10,2) COMMENT 'RUL < this → yellow alert',
+    rul_threshold_critical DECIMAL(10,2) COMMENT 'RUL < this → red alert',
+    fallback_hours  INT COMMENT 'time-based schedule if ML model unavailable',
+    unit            TINYINT NOT NULL DEFAULT 0 COMMENT '0=Hours, 1=Cycles, 2=Days',
+    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at      DATETIME NOT NULL DEFAULT NOW(),
+    UNIQUE KEY uq_component (machine_id, component_name),
+    INDEX idx_components_active (is_active, machine_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Finestre di telemetria aggregate (input per ML)
+CREATE TABLE telemetry_windows (
+    id              BIGINT PRIMARY KEY AUTO_INCREMENT,
+    component_id    INT NOT NULL,
+    window_start    DATETIME NOT NULL,
+    window_end      DATETIME NOT NULL,
+    features        JSON NOT NULL COMMENT '{"avg_torque":12.3, "max_temp":87.5, "sum_cycles":150}',
+    rul_predicted   DECIMAL(10,2) COMMENT 'RUL in hours, NULL if no model',
+    rul_confidence  DECIMAL(5,4) COMMENT '0.0000-1.0000',
+    quality         TINYINT NOT NULL DEFAULT 0 COMMENT '0=Raw, 1=Validated, 2=Anomaly',
+    synced_at       DATETIME COMMENT 'NULL if not synced to cloud',
+    created_at      DATETIME NOT NULL DEFAULT NOW(),
+    FOREIGN KEY (component_id) REFERENCES machine_components(id) ON DELETE CASCADE,
+    INDEX idx_telemetry_component (component_id, window_start DESC),
+    INDEX idx_telemetry_sync (synced_at),
+    INDEX idx_telemetry_quality (quality, window_start)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Predizioni RUL con snapshot features
+CREATE TABLE rul_predictions (
+    id              BIGINT PRIMARY KEY AUTO_INCREMENT,
+    component_id    INT NOT NULL,
+    rul_hours       DECIMAL(10,2) NOT NULL COMMENT 'predicted remaining useful life',
+    confidence      DECIMAL(5,4) NOT NULL,
+    model_version   TINYINT NOT NULL DEFAULT 1,
+    features_snapshot JSON COMMENT 'snapshot of features used for this prediction',
+    predicted_at    DATETIME NOT NULL DEFAULT NOW(),
+    FOREIGN KEY (component_id) REFERENCES machine_components(id) ON DELETE CASCADE,
+    INDEX idx_rul_component (component_id, predicted_at DESC),
+    INDEX idx_rul_time (predicted_at DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Storico guasti reali (training data per ML cloud)
+CREATE TABLE component_failures (
+    id              BIGINT PRIMARY KEY AUTO_INCREMENT,
+    component_id    INT NOT NULL,
+    related_cycle_id BIGINT,
+    failure_mode    VARCHAR(50) NOT NULL COMMENT 'Overload, Wear, Jam, Overheat',
+    downtime_hours  DECIMAL(10,2) NOT NULL DEFAULT 0,
+    repair_cost     DECIMAL(10,2) DEFAULT 0,
+    root_cause      TINYINT NOT NULL DEFAULT 0 COMMENT '0=NormalWear, 1=OperatorError, 2=Design, 3=MaintenanceDelay',
+    failed_at       DATETIME NOT NULL,
+    created_at      DATETIME NOT NULL DEFAULT NOW(),
+    FOREIGN KEY (component_id) REFERENCES machine_components(id) ON DELETE CASCADE,
+    FOREIGN KEY (related_cycle_id) REFERENCES production_cycles(id) ON DELETE SET NULL,
+    INDEX idx_failures_component (component_id, failed_at DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Coda di sincronizzazione cloud (offline buffer)
+CREATE TABLE cloud_sync_log (
+    id              BIGINT PRIMARY KEY AUTO_INCREMENT,
+    table_name      VARCHAR(50) NOT NULL,
+    record_id       BIGINT NOT NULL,
+    operation       TINYINT NOT NULL COMMENT '0=Insert, 1=Update, 2=Delete',
+    status          TINYINT NOT NULL DEFAULT 0 COMMENT '0=Pending, 1=Synced, 2=Failed',
+    retry_count     INT NOT NULL DEFAULT 0,
+    error_message   VARCHAR(1023),
+    payload         JSON COMMENT 'full record snapshot for conflict resolution',
+    created_at      DATETIME NOT NULL DEFAULT NOW(),
+    synced_at       DATETIME,
+    INDEX idx_sync_status (status, created_at),
+    INDEX idx_sync_table (table_name, record_id),
+    INDEX idx_sync_retry (status, retry_count)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+### 25.5 Indici Raccomandati (Extra)
+
+Oltre agli indici già nelle DDL, aggiungere:
+
+```sql
+-- Performance query analitiche
+ALTER TABLE production_cycles ADD INDEX idx_oee (machine_id, success, started_at);
+ALTER TABLE job_items ADD INDEX idx_items_completed (job_id, completed_at);
+ALTER TABLE telemetry_warnings ADD INDEX idx_quality_ml (quality, component_id, window_start);
+
+-- Performance sincronizzazione cloud
+ALTER TABLE cloud_sync_log ADD INDEX idx_cloud_failures (status, retry_count, created_at);
+```
+
+### 25.6 Strategia Cloud Sync
+
+```mermaid
+flowchart LR
+    subgraph Local["LOCALE (MySQL sul PC Industriale)"]
+        T1["orders, jobs, job_items<br/>production_cycles, scrap_events<br/>← dati produzione"]
+        T2["machine_components, telemetry_windows<br/>rul_predictions, component_failures<br/>← dati manutenzione"]
+        CQ["cloud_sync_log<br/>coda: INSERT/UPDATE/DELETE<br/>con retry e conflitto"]
+    end
+
+    subgraph Sync["SINCRONIZZAZIONE"]
+        SC["Sistec.Stack.Cloud<br/>BackgroundService<br/>legge coda ogni N minuti"]
+        BR["Broker MQTT<br/>Sparkplug B<br/>(realtime eventi)"]
+        HTTP["HTTP REST<br/>batch upload<br/>(dati analitici)"]
+    end
+
+    subgraph Cloud["CLOUD (Azure / AWS)"]
+        DB_C["Database cloud<br/>PostgreSQL / TimescaleDB<br/>(dati aggregati, storico)"]
+        ML["ML Pipeline<br/>ri-addestramento modelli<br/>con nuovi failure data"]
+        DASH["Dashboard centrale<br/>OEE, trend, confronto<br/>multi-impianto"]
+    end
+
+    T1 -->|INSERT| CQ
+    T2 -->|INSERT| CQ
+    CQ -->|ogni 5 min| SC
+    SC -->|batch HTTP| HTTP
+    SC -->|eventi realtime| BR
+    HTTP -->|INSERT| DB_C
+    BR -->|Sparkplug| DB_C
+    DB_C -->|features storiche| ML
+    ML -->|modelli .onnx aggiornati| T2
+    DB_C --> DASH
+```
+
+| Strategia | Dettaglio |
+|---|---|
+| **Batch periodico** | `cloud_sync_log` processato ogni 5 min. Record con `status=Pending` → upload HTTP → `status=Synced` |
+| **Realtime eventi** | Eventi critici (job completato, allarme, failure) pubblicati subito via MQTT Sparkplug B |
+| **Conflitto** | `payload` in `cloud_sync_log` salva snapshot completo. Conflict resolution: `updated_at` più recente vince |
+| **Retry** | Fino a 10 tentativi. Dopo 10 → `status=Failed`. Alert operativo su cloud_sync non funzionante |
+| **Offline** | Se cloud non raggiungibile, i record restano `Pending`. Appena torna online, la coda si svuota |
+| **Modelli ML** | Cloud ri-addestra modelli ONNX con nuovi failure data. Download automatico via `CloudModelUpdater` |
+
+### 25.7 Cosa Cambia per le Query Analitiche (MES + Cloud)
+
+| Query | Oggi (impossibile o lento) | Domani (indici + dati normalizzati) |
+|---|---|---|
+| **Pezzi/h per operatore oggi** | `production_log` grezzo, full scan | `production_cycles` + `idx_cycles_machine` + `jobs.operator_id` |
+| **OEE macchina ultimo mese** | Impossibile (nessuna tabella cicli) | `production_cycles` con `idx_oee(machine_id, success, started_at)` |
+| **Trend RUL per componente** | `persistent_vars.Blob` (illegibile) | `telemetry_windows` + `idx_telemetry_component` |
+| **Confronto multi-impianto** | Impossibile (DB isolati) | `cloud_sync_log` → DB cloud centralizzato |
+| **Tempo ciclo medio programma X** | `cut_plan.Data` blob (illegibile) | `production_cycles` + `job_items.program_used` |
+| **Failure rate per macchina** | Assente | `component_failures` + `idx_failures_component` |
+
+### 25.8 Schema Rispetto a Attuale
+
+| Tabella Legacy | Nuovo Schema | Note |
+|---|---|---|
+| `accounts` | `employees` + `roles` | BCrypt, badge RFID, permessi granulari |
+| `orders` | `orders` (migliorato) | FK a `recipes`, timestamp, indici |
+| `jobs` | `jobs` (migliorato) | FK a `orders`, `recipes`, `employees` |
+| `recipes` | `recipes` (invariato) | Già ok |
+| `cut_plan` | `cut_plans` + `cut_plan_items` | Addio longblob, dati normalizzati |
+| `alarm_journal` | Invariato | Già ok con FK a `employees` per ack |
+| `persistent_vars` | `telemetry_windows` + `machine_components` | Blob → JSON strutturato con unità |
+| `maintenance_history` | `maintenance_history` (migliorato) | FK a `machine_components`, `employees` |
+| *(nuova)* | `production_cycles` | Base per OEE, MES, analytics |
+| *(nuova)* | `job_items` | Tracciamento singolo pezzo |
+| *(nuova)* | `scrap_events` | Causa, peso, operatore, QR code |
+| *(nuova)* | `piece_tracking` | Genealogia pezzo (prodotto → QC → spedito) |
+| *(nuova)* | `machine_components` | Catalogo componenti monitorati |
+| *(nuova)* | `telemetry_windows` | Features aggregate per ML |
+| *(nuova)* | `rul_predictions` | Cache ultime predizioni RUL |
+| *(nuova)* | `component_failures` | Training data per ML cloud |
+| *(nuova)* | `cloud_sync_log` | Offline buffer per sync cloud |
+
+### 25.9 Impatto sulla Roadmap
+
+```
+Sforzo complessivo: 3-5 giorni
+├── Giorno 1: Schema DDL + migration
+├── Giorno 2: Adattamento repository esistenti (Order, Job, Recipe)
+├── Giorno 3: Nuovi repository (JobItems, ProductionCycles, ScrapEvents)
+├── Giorno 4: MachineComponents + TelemetryWindows + RulPredictions
+└── Giorno 5: CloudSyncLog + sync strateg
+
+Integrazione con stack esistenti:
+├── Sistec.Stack.JobManagement → usa orders, jobs, job_items
+├── Sistec.Stack.Production → usa production_cycles, scrap_events
+├── Sistec.Stack.Maintenance → usa telemetry_windows, rul_predictions, component_failures
+└── Sistec.Stack.Cloud → consuma cloud_sync_log
+```
+
 ## 24. Standards Compliance: Adozione Formale degli Standard Industriali
 
 L'architettura a stack verticali e le scelte tecnologiche (Avalonia, DI, NuGet) risolvono i problemi di frammentazione del codice, ma **non garantiscono compliance agli standard industriali** che i clienti si aspettano e che i competitor (Siemens WinCC, Rockwell FactoryTalk, Ignition) già supportano nativamente.
@@ -6766,7 +7920,7 @@ ISA-18.2 (Management of Alarm Systems for the Process Industries) definisce il c
 
 #### Gap Attuale
 
-`Sistec.Alarms.Stack` è definito nell'architettura ma senza alcun riferimento a ISA-18.2. Non esiste:
+`Sistec.Stack.Alarms` è definito nell'architettura ma senza alcun riferimento a ISA-18.2. Non esiste:
 - Razionalizzazione allarmi (ogni allarme ha una giustificazione?)
 - Prioritizzazione a 4 livelli (ISA-18.2: Emergency, High, Medium, Low)
 - Alarm flooding prevention
@@ -6776,7 +7930,7 @@ ISA-18.2 (Management of Alarm Systems for the Process Industries) definisce il c
 
 #### Adozione Proposta
 
-| ISA-18.2 Elemento | Implementazione in Sistec.Alarms.Stack |
+| ISA-18.2 Elemento | Implementazione in Sistec.Stack.Alarms |
 |---|---|
 | **Alarm Philosophy** | Documento che definisce: cosa è un allarme, criteri di razionalizzazione, priorità, tempi di risposta attesi |
 | **Prioritization** | 4 livelli: Emergency (🔴), High (🟠), Medium (🟡), Low (🔵) — mapping ISA-18.2 |
@@ -6847,15 +8001,30 @@ ISA-18.2 e ISA-101 interagiscono: la visualizzazione allarmi nell'HMI deve segui
 | **Operator Response Time** | Tempo medio tra RaisedAt e AcknowledgedAt | < 30 secondi per Emergency | Dashboard manutenzione |
 | **Flood Duration** | Tempo con > 10 allarmi/minuto | < 10 minuti | Report mensile |
 
+#### Redis per Stato Allarmi Real-Time
+
+Con Redis opzionale, `Sistec.Stack.Alarms` usa Redis come hot state layer:
+
+| Funzione | Redis Key/Pattern | Dettaglio |
+|---|---|---|
+| **Stato allarme condiviso** | `sistec:{plant}:alarms:{alarmId}` | Hash con campi `state`, `priority`, `raisedAt`, `ackOperatorId` |
+| **Shelving timer** | TTL su chiave allarme in shelved | Allarme riattivato automaticamente alla scadenza del TTL |
+| **Alarm Rate (flood detection)** | `sistec:{plant}:metrics:alarm.rate` | `INCR` + TTL 60s per sliding window — >10 in 1 min = flood |
+| **Pub/Sub notifica** | `channel:alarms:*` | Ogni cambio stato allarme pubblicato → tutti i pannelli aggiornati in tempo reale |
+| **Riconoscimento cross-pannello** | Stato `acknowledged` in Redis | Allarme riconosciuto su AB = silenziato anche su C |
+
+MySQL resta audit trail definitivo. Redis tiene solo lo stato corrente per performance e consistenza multi-pannello.
+
 #### Impatto sulla Roadmap
 
 ```
-Sistec.Alarms.Stack (esistente, da aggiornare)
+Sistec.Stack.Alarms (esistente, da aggiornare)
   ├── AlarmModel ISA-18.2 compliant (sostituisce modello attuale)
-  ├── AlarmShelveService (soppressione temporanea)
-  ├── AlarmFloodDetector (soglia configurabile)
+  ├── AlarmShelveService (soppressione temporanea, TTL Redis)
+  ├── AlarmFloodDetector (soglia configurabile, sliding window Redis)
   ├── AlarmAnalyticsService (report + KPIs)
   ├── IAlarmAudit (tracciamento risposte operatore)
+  ├── RedisAlarmStore (stato condiviso cross-pannello, opzionale)
   └── Test: flood simulation, shelve timeout, priority override
 
 Sforzo: 2-3 settimane (da aggiungere alla Fase 3)
@@ -6863,7 +8032,7 @@ Sforzo: 2-3 settimane (da aggiungere alla Fase 3)
 
 ### 24.4 IEC 62541 — OPC UA PubSub e Field Exchange (FX)
 
-OPC UA è già presente nell'architettura come `Sistec.OpcUa.Library`, ma solo nella modalità **Client/Server** tradizionale. Le estensioni **PubSub** (Publish/Subscribe) e **FX** (Field Exchange) abilitano scenari che il Client/Server tradizionale non copre:
+OPC UA è già presente nell'architettura come `Sistec.Library.OpcUa`, ma solo nella modalità **Client/Server** tradizionale. Le estensioni **PubSub** (Publish/Subscribe) e **FX** (Field Exchange) abilitano scenari che il Client/Server tradizionale non copre:
 
 | Estensione | Cosa abilita | Perché serve |
 |---|---|---|
@@ -6886,7 +8055,7 @@ flowchart TB
     end
 
     subgraph Northbound["NORTHBOUND — Cloud / IT"]
-        Cloud["Sistec.Cloud.Stack<br/>MQTT Subscriber<br/>+ Forwarder"]
+        Cloud["Sistec.Stack.Cloud<br/>MQTT Subscriber<br/>+ Forwarder"]
         Dashboard["Dashboard<br/>React / Grafana"]
         ERP["ERP / MES"]
     end
@@ -6903,7 +8072,7 @@ flowchart TB
     style Northbound fill:#e3f2fd
 ```
 
-#### Aggiornamento Sistec.OpcUa.Library
+#### Aggiornamento Sistec.Library.OpcUa
 
 | Componente | Stato Attuale | Target |
 |---|---|---|
@@ -6911,12 +8080,12 @@ flowchart TB
 | `MonitoredItem` | Subscription a tag specifici | ✅ Esistente |
 | **OPC UA PubSub** | Non presente | 📝 Reader + Writer (nuovo) |
 | **OPC UA FX** | Non presente | 📝 Valutare se PLC CODESYS lo supporta |
-| **OPC UA over MQTT** | Non presente | 📝 Nuovo trasporto per Sistec.Cloud.Stack |
+| **OPC UA over MQTT** | Non presente | 📝 Nuovo trasporto per Sistec.Stack.Cloud |
 
 #### Impatto sulla Roadmap
 
 ```
-Sistec.OpcUa.Library (aggiornato)
+Sistec.Library.OpcUa (aggiornato)
   ├── Client/Server (esistente)
   ├── OPC UA PubSub Reader (nuovo, per ascolto eventi broadcast)
   ├── OPC UA PubSub Writer (nuovo, per pubblicazione eventi HMI)
@@ -6993,10 +8162,10 @@ spBv1.0/
 | **Scalabilità** | Aggiungere un nuovo consumer (dashboard, MES, ERP) = sottoscriversi al topic |
 | **Standard** | Sparkplug B è standard Eclipse Foundation, supportato da Ignition, Weintek, EMQX |
 
-#### Impatto su Sistec.Cloud.Stack
+#### Impatto su Sistec.Stack.Cloud
 
 ```
-Sistec.Cloud.Stack (aggiornato con Sparkplug B)
+Sistec.Stack.Cloud (aggiornato con Sparkplug B)
   ├── SparkplugNode — implementa Edge Node (birth/death/data)
   ├── MqttPublisher — protocollo MQTT con payload Protobuf
   ├── OfflineBuffer — buffer Sparkplug-compatible (coda sequenziale)
@@ -7007,7 +8176,7 @@ Sistec.Cloud.Stack (aggiornato con Sparkplug B)
 #### Roadmap UNS
 
 ```
-Fase 1 — Sistec.OpcUa.Library + Sistec.Cloud.Stack
+Fase 1 — Sistec.Library.OpcUa + Sistec.Stack.Cloud
   ├── OPC UA PubSub Reader (ascolta eventi PLC)
   ├── Sparkplug B Edge Node (pubblica dati HMI + PLC)
   ├── MQTT Broker locale opzionale (Mosquitto in container)
