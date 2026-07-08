@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diagrammi Architettura — Attuale vs Proposta</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #f5f6fa;
+    color: #2c3e50;
+    padding: 2rem;
+  }
+  h1 {
+    text-align: center;
+    font-size: 1.6rem;
+    margin-bottom: 2rem;
+  }
+  h2 {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+    border-left: 4px solid #2e7d32;
+    padding-left: 0.6rem;
+  }
+  section {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 0 auto 2.5rem;
+    max-width: 1400px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .mermaid {
+    display: flex;
+    justify-content: center;
+    overflow-x: auto;
+  }
+</style>
+</head>
+<body>
+
+<h1>Architettura Sistec HMI — Attuale vs Proposta</h1>
+
+<section>
+  <h2>1. Architettura Corrente: Monolite Condiviso</h2>
+  <div class="mermaid">
+flowchart TB
+    subgraph Foundation["LIBRERIE FONDAZIONE (identiche)"]
+        Core["Sistec.Core (netstandard2.1)<br/>Modelli · Interfacce · Enum · Utils<br/>215-219 file"]
+        Controls["Sistec.Controls (net8.0-windows)<br/>Bottoni, LED, Motori, Valvole<br/>Controlli generici WinForms"]
+        UI["Sistec.UI (net8.0-windows)<br/>Layout pagine, dialoghi base<br/>44 file"]
+        OpcUa["Sistec.Opc.Ua (netstandard2.1)<br/>Wrapper OPC UA Foundation SDK<br/>19 file"]
+    end
+
+    subgraph LAG_Only["SOLO 5315 LAG"]
+        Safan["Sistec.Safan (netstandard2.1)<br/>Client TCP pressa Safan<br/>Test NUnit + Simulator"]
+        Sinumerik["Sistec.Sinumerik (netstandard2.1)<br/>Adattatore CNC Siemens ONE<br/>LagNx1525 + Simulazione"]
+    end
+
+    subgraph FAEL_Only["SOLO 5309 FAEL"]
+        KukaClient["Kuka.Client (netstandard2.1)<br/>Client TCP KRC robot<br/>11 file"]
+        EsaClient["Esa.Client (netstandard2.1)<br/>Client Modbus pressa ESA<br/>6 file"]
+        EasyModbus["EasyModbus (netstandard2.1)<br/>Stack Modbus TCP puro"]
+        Bus["Sistec.Bus (net8.0-windows)<br/>Zebus messaging pub/sub"]
+    end
+
+    Foundation --> LAG_Only
+    Foundation --> FAEL_Only
+  </div>
+</section>
+
+<section>
+  <h2>2. Architettura Proposta: Stack Verticali Unificati</h2>
+  <div class="mermaid">
+flowchart TB
+    subgraph Fondazione["FONDAZIONE"]
+        Core["Sistec.Core<br/>Modelli dominio, Interfacce pure<br/>Enum, Eccezioni, Eventi<br/>netstandard2.1"]
+        Controls["Sistec.Controls<br/>Controlli WinForms generici<br/>Led, Button, Container, Motors, Valves<br/>Nessuna logica di dominio"]
+        SistecUI["Sistec.UI<br/>Layout pagine, menu,<br/>alarm banner, user management"]
+    end
+
+    subgraph Comunicazione["LIBRERIE ORIZZONTALI"]
+        OpcUaLib["Sistec.OpcUa.Library<br/>IUAClient, MonitoredItem<br/>Session management puro"]
+        ModbusLib["Sistec.Modbus.Library<br/>EasyModbus puro<br/>Client/Server Modbus TCP"]
+        BusLib["Sistec.Bus.Library<br/>Zebus pub/sub o HTTP+Redis<br/>Comunicazione inter-pannello"]
+    end
+
+    subgraph Macchine["STACK VERTICALI — MACCHINE"]
+        Kuka["Sistec.Kuka.Stack<br/>Robot KUKA KRC<br/>Client TCP · Driver · Services · UI · Simulator"]
+        Safan["Sistec.Safan.Stack<br/>Pressa Safan (TCP)<br/>Client · Driver · Services · UI · Simulator"]
+        Esa["Sistec.Esa.Stack<br/>Pressa ESA (Modbus)<br/>Client · Driver · Services · UI · Simulator"]
+        PlcInt["Sistec.PLC.Stack<br/>Interfaccia PLC (OPC UA)<br/>Client · Driver · Services · UI · Simulator"]
+        Sinumerik["Sistec.Sinumerik.Stack<br/>CNC Siemens ONE<br/>Client · Driver · Services · UI · Simulator"]
+    end
+
+    subgraph Applicazione["STACK VERTICALI — APPLICAZIONE"]
+        Production["Sistec.Production.Stack<br/>Orchestrazione produzione<br/>Services + UI"]
+        JobMgmt["Sistec.JobManagement.Stack<br/>Job lifecycle, tracking<br/>Services + UI"]
+        Maintenance["Sistec.Maintenance.Stack<br/>Manutenzione, safety<br/>Services + UI"]
+        Alarms["Sistec.Alarms.Stack<br/>Alarm journal, notifiche<br/>Services + UI"]
+    end
+
+    subgraph Persistence["PERSISTENZA (multi-progetto)"]
+        PersAbst["Sistec.Infra.Persistence<br/>Interfacce repository,<br/>Unit of Work contract"]
+        PersDapper["Sistec.Infra.Persistence.Dapper<br/>Implementazione Dapper"]
+        PersMySql["Sistec.Infra.Persistence.MySql<br/>MySqlConnector"]
+        PersSqlSrv["Sistec.Infra.Persistence.SqlServer<br/>Microsoft.Data.SqlClient"]
+        PersUoW["Sistec.Infra.Persistence.UnitOfWork<br/>Transaction scope"]
+    end
+
+    subgraph Config["CONFIGURAZIONE"]
+        ConfigLib["Sistec.Configuration<br/>Options pattern, INI/XML reader<br/>IOptions&lt;T&gt;"]
+    end
+
+    subgraph CodeGen["CODE GENERATION"]
+        DUTGen["Sistec.Infra.CodeGen<br/>dotnet tool<br/>CODESYS → POCO + OPC UA + TagConstants"]
+    end
+
+    Production -->|usa| Kuka
+    Production -->|usa| Safan
+    Production -->|usa| Esa
+    Production -->|usa| PlcInt
+    Production -->|usa| Sinumerik
+    Production -->|usa| JobMgmt
+
+    Kuka --> OpcUaLib
+    Safan --> Core
+    Esa --> ModbusLib
+    PlcInt --> OpcUaLib
+    Sinumerik --> OpcUaLib
+
+    Kuka --> Core
+    Safan --> Core
+    Esa --> Core
+    PlcInt --> Core
+    Sinumerik --> Core
+
+    PersAbst --> Core
+    PersDapper --> PersAbst
+    PersMySql --> PersDapper
+    PersSqlSrv --> PersDapper
+    PersUoW --> PersDapper
+
+    ConfigLib --> Core
+    DUTGen --> PlcInt
+
+    classDef foundation fill:#e1f5e1,stroke:#2e7d32
+    classDef comm fill:#fce4ec,stroke:#c62828
+    classDef machine fill:#e8f5e9,stroke:#2e7d32
+    classDef app fill:#fff8e1,stroke:#f57f17
+    classDef data fill:#f3e5f5,stroke:#7b1fa2
+    classDef infra fill:#e0f7fa,stroke:#006064
+
+    class Core,Controls,SistecUI foundation
+    class OpcUaLib,ModbusLib,BusLib comm
+    class Kuka,Safan,Esa,PlcInt,Sinumerik machine
+    class Production,JobMgmt,Maintenance,Alarms app
+    class PersAbst,PersDapper,PersMySql,PersSqlSrv,PersUoW data
+    class ConfigLib,DUTGen infra
+  </div>
+</section>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    securityLevel: 'loose',
+    fontFamily: 'Segoe UI, sans-serif'
+  });
+</script>
+
+</body>
+</html>
