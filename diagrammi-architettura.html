@@ -48,27 +48,93 @@
   <h2>1. Architettura Corrente: Monolite Condiviso</h2>
   <div class="mermaid">
 flowchart TB
-    subgraph Foundation["LIBRERIE FONDAZIONE (identiche)"]
-        Core["Sistec.Core (netstandard2.1)<br/>Modelli · Interfacce · Enum · Utils<br/>215-219 file"]
-        Controls["Sistec.Controls (net8.0-windows)<br/>Bottoni, LED, Motori, Valvole<br/>Controlli generici WinForms"]
-        UI["Sistec.UI (net8.0-windows)<br/>Layout pagine, dialoghi base<br/>44 file"]
-        OpcUa["Sistec.Opc.Ua (netstandard2.1)<br/>Wrapper OPC UA Foundation SDK<br/>19 file"]
+    subgraph Foundation["LIBRERIE FONDAZIONE (identiche LAG + FAEL)"]
+        Core["Sistec.Core (netstandard2.1)<br/>Modelli · Interfacce · Enum<br/>215-219 file"]
+        Controls["Sistec.Controls (net8.0-windows)<br/>Led, Button, Motors, Valves<br/>Controlli generici WinForms"]
+        UILib["Sistec.UI (net8.0-windows)<br/>Layout pagine, dialoghi base<br/>44 file"]
+        OpcUaLib["Sistec.Opc.Ua (netstandard2.1)<br/>Wrapper OPC UA Foundation SDK<br/>19 file"]
     end
 
-    subgraph LAG_Only["SOLO 5315 LAG"]
-        Safan["Sistec.Safan (netstandard2.1)<br/>Client TCP pressa Safan<br/>Test NUnit + Simulator"]
-        Sinumerik["Sistec.Sinumerik (netstandard2.1)<br/>Adattatore CNC Siemens ONE<br/>LagNx1525 + Simulazione"]
+    subgraph LAG_Proj["COMMESSA LAG (5315)"]
+        LCommon["Sistec.5315/Common<br/>21 directory · ~270 file<br/>⚡ Hub dipendenze<br/>referenzia 6 progetti<br/>❌ contiene KrcClientLogic"]
+        LForm["MainForm.cs<br/>19 partial file<br/>❌ costruttore 368 righe<br/>new SafanClient, PlcLogic<br/>CellLogic(...) tutto manuale"]
+        Safan["Sistec.Safan<br/>Client TCP pressa Safan<br/>Test NUnit + Simulator"]
+        Sinumerik["Sistec.Sinumerik<br/>Adapter CNC Siemens ONE<br/>LagNx1525 + Simulazione"]
     end
 
-    subgraph FAEL_Only["SOLO 5309 FAEL"]
-        KukaClient["Kuka.Client (netstandard2.1)<br/>Client TCP KRC robot<br/>11 file"]
-        EsaClient["Esa.Client (netstandard2.1)<br/>Client Modbus pressa ESA<br/>6 file"]
-        EasyModbus["EasyModbus (netstandard2.1)<br/>Stack Modbus TCP puro"]
-        Bus["Sistec.Bus (net8.0-windows)<br/>Zebus messaging pub/sub"]
+    subgraph FAEL_Proj["COMMESSA FAEL (5309)"]
+        FCommon["Sistec.HMI/Common<br/>12+ directory · ~270 file<br/>⚡ Hub dipendenze<br/>referenzia 5 progetti<br/>❌ contiene KrcClientLogic"]
+        FForm["FrmHMI.cs<br/>24 partial file · ~5156 righe<br/>❌ costruttore 490 righe<br/>usa OpcUaClient, KrcClient<br/>direttamente"]
+        KukaClient["Kuka.Client (11 file)<br/>✅ Client TCP KRC isolato<br/>KrcClient, KrcConnectionPool"]
+        EsaClient["Esa.Client (6 file)<br/>Client Modbus pressa ESA<br/>✅ isolato"]
+        Bus["Sistec.Bus<br/>Zebus pub/sub messaging"]
     end
 
-    Foundation --> LAG_Only
-    Foundation --> FAEL_Only
+    EasyModbus["EasyModbus<br/>Stack Modbus TCP puro"]
+
+    %% ===== Foundation internal deps =====
+    Controls --> Core
+    UILib --> Controls
+    UILib --> Core
+    OpcUaLib --> Core
+
+    %% ===== Common hub: LAG =====
+    LCommon -->|hub| Core
+    LCommon -->|hub| Controls
+    LCommon -->|hub| OpcUaLib
+    LCommon -->|hub| UILib
+    LCommon -->|hub| Safan
+    LCommon -->|hub| Sinumerik
+
+    %% ===== Common hub: FAEL =====
+    FCommon -->|hub| Core
+    FCommon -->|hub| Controls
+    FCommon -->|hub| OpcUaLib
+    FCommon -->|hub| KukaClient
+    FCommon -->|hub| Bus
+
+    %% ===== Form bypass layer (❌) =====
+    LForm -.->|❌ bypassa Common| OpcUaLib
+    LForm -.->|❌ bypassa Common| Core
+    LForm --> LCommon
+
+    FForm -.->|❌ bypassa Common| OpcUaLib
+    FForm -.->|❌ bypassa Common| Core
+    FForm -.->|❌ bypassa Common| KukaClient
+    FForm --> FCommon
+
+    %% ===== Machine deps =====
+    Safan --> Core
+    Sinumerik --> Core
+    Sinumerik --> OpcUaLib
+    KukaClient --> Core
+    EsaClient --> Core
+    EsaClient --> EasyModbus
+    Bus --> Core
+
+    %% ===== KUKA scattering highlights =====
+    subgraph KukaScatter["⚠️ KUKA disperso in 4 progetti (FAEL)"]
+        K1["① Kuka.Client<br/>✅ Client TCP puro"]
+        K2["② Common/Logic<br/>❌ KrcClientLogic"]
+        K3["③ Common/Controls<br/>❌ RobotCommand UI"]
+        K4["④ FrmHMI<br/>❌ usa KrcClient diretto"]
+    end
+
+    K1 -.->|fa parte di| KukaClient
+    K2 -.->|mescolato in| FCommon
+    K3 -.->|mescolato in| FCommon
+    K4 -.->|sparpagliato in| FForm
+
+    %% ===== Style classes =====
+    classDef hub fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef bypass fill:#ffebee,stroke:#c62828,stroke-dasharray:5 5
+    classDef clean fill:#e8f5e9,stroke:#2e7d32
+    classDef warning fill:#fff8e1,stroke:#f57f17
+
+    class LCommon,FCommon hub
+    class LForm,FForm bypass
+    class KukaClient,Safan,Sinumerik,EsaClient,Bus,Controls,UILib,Core,OpcUaLib clean
+    class K1,K2,K3,K4 warning
   </div>
 </section>
 
@@ -77,75 +143,111 @@ flowchart TB
   <div class="mermaid">
 flowchart TB
     subgraph Fondazione["FONDAZIONE"]
-        Core["Sistec.Core<br/>Modelli dominio, Interfacce pure<br/>Enum, Eccezioni, Eventi<br/>netstandard2.1"]
-        Controls["Sistec.Controls<br/>Controlli WinForms generici<br/>Led, Button, Container, Motors, Valves<br/>Nessuna logica di dominio"]
-        SistecUI["Sistec.UI<br/>Layout pagine, menu,<br/>alarm banner, user management"]
+        Core["Sistec.Core<br/>Modelli dominio · Interfacce pure<br/>Enum · Eccezioni · Eventi<br/>netstandard2.1"]
+        Controls["Sistec.Controls<br/>Led · Button · Container · Motors · Valves<br/>Nessuna logica di dominio"]
+        SistecUI["Sistec.UI<br/>Layout pagine · menu ·<br/>alarm banner · user management"]
     end
 
-    subgraph Comunicazione["LIBRERIE ORIZZONTALI"]
-        OpcUaLib["Sistec.OpcUa.Library<br/>IUAClient, MonitoredItem<br/>Session management puro"]
-        ModbusLib["Sistec.Modbus.Library<br/>EasyModbus puro<br/>Client/Server Modbus TCP"]
-        BusLib["Sistec.Bus.Library<br/>Zebus pub/sub o HTTP+Redis<br/>Comunicazione inter-pannello"]
+    subgraph Horz["LIBRERIE ORIZZONTALI"]
+        TcpLib["Sistec.Library.Tcp<br/>Socket pool · reconnect<br/>protocollo TCP generico"]
+        OpcUaLib["Sistec.Library.OpcUa<br/>UAClient · MonitoredItem<br/>Session management puro"]
+        ModbusLib["Sistec.Library.Modbus<br/>EasyModbus puro<br/>Client/Server Modbus TCP"]
+        BusLib["Sistec.Bus.Library<br/>Zebus pub/sub o HTTP+Redis<br/>Inter-pannello"]
     end
 
-    subgraph Macchine["STACK VERTICALI — MACCHINE"]
-        Kuka["Sistec.Kuka.Stack<br/>Robot KUKA KRC<br/>Client TCP · Driver · Services · UI · Simulator"]
-        Safan["Sistec.Safan.Stack<br/>Pressa Safan (TCP)<br/>Client · Driver · Services · UI · Simulator"]
-        Esa["Sistec.Esa.Stack<br/>Pressa ESA (Modbus)<br/>Client · Driver · Services · UI · Simulator"]
-        PlcInt["Sistec.PLC.Stack<br/>Interfaccia PLC (OPC UA)<br/>Client · Driver · Services · UI · Simulator"]
-        Sinumerik["Sistec.Sinumerik.Stack<br/>CNC Siemens ONE<br/>Client · Driver · Services · UI · Simulator"]
+    subgraph Macchine["STACK VERTICALI — MACCHINA"]
+        Kuka["Sistec.Kuka.Stack<br/>Robot KUKA KRC (TCP)<br/>Client·Driver·Services·UI·Simulator"]
+        Safan["Sistec.Safan.Stack<br/>Pressa Safan (TCP)<br/>Client·Driver·Services·UI·Simulator"]
+        Esa["Sistec.Esa.Stack<br/>Pressa ESA (Modbus)<br/>Client·Driver·Services·UI·Simulator"]
+        PlcInt["Sistec.PLC.Stack<br/>Interfaccia PLC (OPC UA)<br/>Client·Driver·Services·UI·Simulator"]
+        Sinumerik["Sistec.Sinumerik.Stack<br/>CNC Siemens ONE (OPC UA)<br/>Client·Driver·Services·UI·Simulator"]
     end
 
-    subgraph Applicazione["STACK VERTICALI — APPLICAZIONE"]
-        Production["Sistec.Production.Stack<br/>Orchestrazione produzione<br/>Services + UI"]
-        JobMgmt["Sistec.JobManagement.Stack<br/>Job lifecycle, tracking<br/>Services + UI"]
-        Maintenance["Sistec.Maintenance.Stack<br/>Manutenzione, safety<br/>Services + UI"]
-        Alarms["Sistec.Alarms.Stack<br/>Alarm journal, notifiche<br/>Services + UI"]
+    subgraph App["STACK VERTICALI — APPLICAZIONE"]
+        Prod["Sistec.Production.Stack<br/>Orchestrazione produzione<br/>Services + UI"]
+        JobMgmt["Sistec.JobManagement.Stack<br/>Job lifecycle · tracking<br/>Services + UI"]
+        Maint["Sistec.Maintenance.Stack<br/>Manutenzione · Safety<br/>Services + UI"]
+        Alarms["Sistec.Alarms.Stack<br/>Alarm journal · notifiche<br/>Services + UI"]
     end
 
-    subgraph Persistence["PERSISTENZA (multi-progetto)"]
-        PersAbst["Sistec.Infra.Persistence<br/>Interfacce repository,<br/>Unit of Work contract"]
-        PersDapper["Sistec.Infra.Persistence.Dapper<br/>Implementazione Dapper"]
+    subgraph Pers["PERSISTENZA (multi-progetto)"]
+        PersAbst["Sistec.Infra.Persistence<br/>Interfacce repository<br/>Unit of Work contract"]
+        PersDapper["Sistec.Infra.Persistence.Dapper<br/>Implementation Dapper"]
         PersMySql["Sistec.Infra.Persistence.MySql<br/>MySqlConnector"]
         PersSqlSrv["Sistec.Infra.Persistence.SqlServer<br/>Microsoft.Data.SqlClient"]
         PersUoW["Sistec.Infra.Persistence.UnitOfWork<br/>Transaction scope"]
     end
 
-    subgraph Config["CONFIGURAZIONE"]
-        ConfigLib["Sistec.Configuration<br/>Options pattern, INI/XML reader<br/>IOptions&lt;T&gt;"]
+    subgraph Infra["INFRASTRUTTURA"]
+        ConfigLib["Sistec.Configuration<br/>Options pattern · IOptions&lt;T&gt;<br/>INI/XML reader"]
+        DUTGen["Sistec.Infra.CodeGen<br/>dotnet tool<br/>CODESYS → POCO + OPC UA"]
     end
 
-    subgraph CodeGen["CODE GENERATION"]
-        DUTGen["Sistec.Infra.CodeGen<br/>dotnet tool<br/>CODESYS → POCO + OPC UA + TagConstants"]
+    subgraph Host["HOST APPLICAZIONE (composition root)"]
+        MainWin["Sistec.HMI (EXE)<br/>✅ Thin composition root<br/>✅ DI container (IServiceCollection)<br/>✅ MainWindow da Sistec.UI<br/>Nessuna logica di dominio"]
     end
 
-    Production -->|usa| Kuka
-    Production -->|usa| Safan
-    Production -->|usa| Esa
-    Production -->|usa| PlcInt
-    Production -->|usa| Sinumerik
-    Production -->|usa| JobMgmt
+    Notes["Nota: ogni stack macchina contiene 5 layer verticali<br/>Client → Driver → Services → UI → Simulator<br/>Le frecce tra stack rappresentano dipendenze a livello Services"]
 
-    Kuka --> OpcUaLib
-    Safan --> Core
-    Esa --> ModbusLib
-    PlcInt --> OpcUaLib
-    Sinumerik --> OpcUaLib
+    %% === FONDAZIONE ===
+    Controls --> Core
+    SistecUI --> Controls
+    SistecUI --> Core
 
+    %% === HOST → app stacks ===
+    MainWin --> Controls
+    MainWin --> SistecUI
+    MainWin --> Prod
+    MainWin --> JobMgmt
+    MainWin --> Maint
+    MainWin --> Alarms
+
+    %% === LIBRERIE ORIZZONTALI → Core ===
+    TcpLib --> Core
+    OpcUaLib --> Core
+    ModbusLib --> Core
+    BusLib --> Core
+
+    %% === STACK MACCHINA → librerie orizzontali + Core ===
+    Kuka --> TcpLib
     Kuka --> Core
+    Kuka -.->|opzionale OPC UA| OpcUaLib
+
+    Safan --> TcpLib
     Safan --> Core
+
+    Esa --> ModbusLib
     Esa --> Core
+
+    PlcInt --> OpcUaLib
     PlcInt --> Core
+
+    Sinumerik --> OpcUaLib
     Sinumerik --> Core
 
+    %% === STACK APPLICAZIONE → macchine ===
+    Prod --> Kuka
+    Prod --> Safan
+    Prod --> Esa
+    Prod --> PlcInt
+    Prod --> Sinumerik
+    Prod --> JobMgmt
+
+    %% === STACK APPLICAZIONE → persistenza ===
+    JobMgmt --> PersAbst
+    Maint --> PersAbst
+    Alarms --> PersAbst
+
+    %% === PERSISTENZA ===
     PersAbst --> Core
     PersDapper --> PersAbst
     PersMySql --> PersDapper
     PersSqlSrv --> PersDapper
     PersUoW --> PersDapper
 
+    %% === INFRA ===
     ConfigLib --> Core
-    DUTGen --> PlcInt
+    DUTGen -.->|genera tag DUT| PlcInt
 
     classDef foundation fill:#e1f5e1,stroke:#2e7d32
     classDef comm fill:#fce4ec,stroke:#c62828
@@ -153,13 +255,17 @@ flowchart TB
     classDef app fill:#fff8e1,stroke:#f57f17
     classDef data fill:#f3e5f5,stroke:#7b1fa2
     classDef infra fill:#e0f7fa,stroke:#006064
+    classDef note fill:#f5f5f5,stroke:#9e9e9e,stroke-dasharray:5 5
+    classDef shell fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
 
     class Core,Controls,SistecUI foundation
-    class OpcUaLib,ModbusLib,BusLib comm
+    class TcpLib,OpcUaLib,ModbusLib,BusLib comm
     class Kuka,Safan,Esa,PlcInt,Sinumerik machine
-    class Production,JobMgmt,Maintenance,Alarms app
+    class Prod,JobMgmt,Maint,Alarms app
     class PersAbst,PersDapper,PersMySql,PersSqlSrv,PersUoW data
     class ConfigLib,DUTGen infra
+    class Notes note
+    class MainWin shell
   </div>
 </section>
 
