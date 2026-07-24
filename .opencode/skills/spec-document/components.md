@@ -78,7 +78,32 @@ dotted number (`3.1`, `3.2`).
 </ul>
 ```
 
-## Code / pseudo-code block
+## Code block — real syntax (preferred)
+
+Real code (C#, JSON, SQL, YAML, bash, PowerShell, JS/TS, XML/HTML) gets automatic keyword/string/
+number/comment coloring via a bundled offline Prism.js (no CDN, no network — self-contained same as
+everything else). Just tag the language and escape entities; the page highlights it on load and it
+re-colors for free on theme toggle (colors are CSS vars, same tokens as the rest of the sheet).
+
+```html
+<pre><code class="language-csharp">public class ControlFactory {
+    private readonly Dictionary&lt;string, int&gt; _map = new();
+    public bool TryGet(string key, out int value) {
+        return _map.TryGetValue(key, out value); // commento
+    }
+}</code></pre>
+```
+
+Common `language-*` values: `csharp`, `json`, `sql`, `yaml`, `bash`, `powershell`, `javascript`,
+`typescript`, `markup` (XML/HTML). Escape `<`, `>`, `&` as `&lt;`, `&gt;`, `&amp;` — same as any
+`<pre>`. Don't add manual `<b>`/`<span>` markup inside a `language-*` block: Prism regenerates the
+block's markup from the raw text, so hand-placed spans get discarded.
+
+## Code block — annotated pseudo-code (manual emphasis)
+
+Use this variant instead when you need to hand-highlight something Prism can't know about — a
+"STOP, condizione critica" line, a call-out keyword mid pseudo-code. No `language-*` class → Prism
+leaves the block alone.
 
 ```html
 <pre><b>KEYWORD</b>  intestazione
@@ -88,7 +113,8 @@ dotted number (`3.1`, `3.2`).
 ```
 
 `<b>` = signal keyword, `<span class="c">` = muted comment, `<b class="crit">` = red critical line.
-Escape `<`, `>`, `&` as `&lt;`, `&gt;`, `&amp;`.
+Escape `<`, `>`, `&` as `&lt;`, `&gt;`, `&amp;`. Prefer a `.callout risk` right after the block over
+burying a critical warning inside code, when the surrounding block does use real Prism highlighting.
 
 ## Figure plate with SVG diagram
 

@@ -6,7 +6,7 @@ description: Create a Sistec engineering-sheet specification / design document a
 # spec-document
 
 Produce a specification document matching the Sistec engineering-sheet style: the exact CSS design
-system (`--paper`/`--ink`/`--signal` tokens — warm terracotta accent `#cc785c` on cream `#f7f6f3`,
+system (`--paper`/`--ink`/`--signal` tokens — warm terracotta accent `#cc785c` on cream `#f0ece2`,
 Cascadia + Segoe fonts, light/dark + theme toggle), structural chrome (`header.sheet`, `dl.sig`,
 numbered `§` sections, `figure` plates, `.tbl-wrap` tables with accent-header cards, Revisions
 table, footer), and Sistec conventions.
@@ -14,10 +14,18 @@ table, footer), and Sistec conventions.
 ## Files in this skill
 
 - `template.html` — the scaffold: full `<style>` block **verbatim** + a fillable body skeleton + the
-  theme-toggle script. Start every document by copying this.
+  theme-toggle script + the bundled Prism.js highlighter. Start every document by copying this.
 - `sheet.css` — the same CSS as `template.html`'s `<style>` block, kept as a standalone file so it can
   be diffed straight against the live site's `style.css` when the palette/style changes again. Not
   linked by generated docs (those stay single-file) — edit it **and** `template.html` together, in sync.
+- `prism-bundle.js` — Prism.js 1.29.0 core + clike/markup/csharp/json/bash/sql/yaml/powershell/
+  javascript/typescript grammars, concatenated, MIT-licensed, embedded verbatim as an inline `<script>`
+  at the end of `template.html`'s `<body>` (offline, no CDN). Gives real keyword/string/number/comment
+  highlighting to `<pre><code class="language-*">` blocks; colors come from the same `--signal`/`--ok`/
+  `--crit`/… token vars via the `.token.*` rules in `sheet.css`, so it themes automatically and needs
+  no re-render on toggle. Re-fetch and re-concatenate only if a language needs adding — see the fetch
+  one-liner in this skill's git history, or grab `components/prism-<lang>.min.js` from cdnjs for
+  Prism 1.29.0 and append.
 - `components.md` — copy-paste markup for every block (callout, figure/SVG, table, steps, pre, tags).
   Read it when you need a component you don't already have in front of you.
 
@@ -40,9 +48,13 @@ table, footer), and Sistec conventions.
 5. **Diagrams.** Author SVG inline (`svg.dgm` in a `figure` plate). Fills/strokes MUST use token vars
    (`var(--signal)`, `var(--ok)`, …) so they theme — never hard-code hex in the body/SVG. Add a
    `.legend` mapping swatch → meaning.
-6. **Revisions section** (`§` = `rev`, always last before footer) + **footer**. New doc = one `1.0`
+6. **Real code.** Use `<pre><code class="language-csharp">` (or `json`/`sql`/`yaml`/`bash`/
+   `powershell`/`javascript`/`typescript`/`markup`) for actual code — Prism highlights it automatically,
+   see `components.md`. Reserve the manual `<b>`/`.c`/`.crit` pre-block style for annotated pseudo-code
+   where you need to hand-mark something a tokenizer can't know (e.g. a "STOP" line).
+7. **Revisions section** (`§` = `rev`, always last before footer) + **footer**. New doc = one `1.0`
    "Emissione iniziale" row. Footer restates `N § · M figure` and `v1.0`.
-7. **Fill the footer** section/figure counts and version.
+8. **Fill the footer** section/figure counts and version.
 
 ## Revising an existing doc (version bump)
 
@@ -55,9 +67,10 @@ When editing an already-issued sheet, do all four in the same change:
 
 - **Self-contained, single file.** All CSS inline in the `<style>` block; SVG inline; no external
   fonts/scripts/images. It must open correctly by double-click and also survive as a Claude Artifact.
-- **Never touch the `<style>` block or the theme script** — they are the shared design system; copy
-  verbatim from `template.html`. Style only via the existing classes/tokens. If the design system
-  itself needs updating, edit `template.html` and `sheet.css` together (see "Files in this skill").
+- **Never touch the `<style>` block, the theme script, or the bundled Prism `<script>`** — they are
+  the shared design system; copy verbatim from `template.html`. Style only via the existing
+  classes/tokens. If the design system itself needs updating, edit `template.html` and `sheet.css`
+  together (see "Files in this skill").
 - **Dates** `YYYY-MM-DD`. **Language** matches the request (the reference is Italian).
 - **Escape** `<`, `>`, `&` as `&lt;`/`&gt;`/`&amp;` inside `<pre>`/`<code>` content.
 - **Save location:** if a project is active (P3), write to `<project>\specifications\<name>.html`;
