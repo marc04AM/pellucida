@@ -1,0 +1,565 @@
+CONVERSAZIONE — ARCHITETTURA SISTEC HMI, RICETTE E PALLET
+Data: 1 ottobre 2026
+==========================================================================
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+https://marc04am.github.io/pellucida/
+
+[Documento letto: "Sistec HMI — Analisi Unificata dell'Architettura",
+Marco Manfrin, v1.0, 2026-07-24. Analisi di LAG (5315) e FAEL (5309),
+anti-pattern del monolite, proposta di stack verticali, NuGet, DI,
+Avalonia, Layout Engine, Recipe Engine, Pallet State Machine, utenti,
+manutenzione predittiva, Digital Twin, ecc.]
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+procederei così: tcp tag kuka opcua plc code gen modbus pressa1
+persistenza livelli e utenti + cripto psw, ui config ui job/produzione
+digitalTwin3d cloud manutenzione predittiva… cosa manca?
+
+--------------------------------------------------------------------------
+CLAUDE
+--------------------------------------------------------------------------
+La sequenza regge, ma mancano alcuni pezzi. Alcuni vanno messi prima di
+tutto il resto, altri sono buchi veri.
+
+Da mettere all'inizio (sprint 0)
+- Sistec.Core + Composition Root: interfacce (ports), DI, IOptions<T>,
+  ILogger<T> JSON. Se parti dal TCP senza queste fondamenta, il primo
+  stack nasce già con new e logger statici.
+- Feed NuGet + CI/CD + template dotnet new sistec-hmi.
+- Simulatori, scritti insieme a ogni stack e non dopo (KRC finto,
+  FakeOpcUa unico, server Modbus finto).
+
+Buchi veri nella lista
+- Allarmi: journal, ack, priorità, storico (ISA-18.2). Subito dopo il PLC.
+- Watchdog, ModeService, connection health, ReconnectionPolicy.
+- ProductionOrchestrator (Mediator), Recipe Engine, Pallet State Machine.
+- Audit trail legato agli utenti fin dall'inizio.
+- i18n con chiavi parlanti (ui.btn.cancel).
+- Shell Avalonia: navigazione, touch, theming, linee guida ISA-101.
+- Deploy e update: Ansible, servizio Windows, backup/restore, rollback.
+
+Due note sull'ordine
+- CodeGen prima dei tag PLC, non dopo.
+- Raccolta telemetria dal giorno 1: senza storico non si addestra la
+  predittiva.
+
+Ordine rivisto
+Core/DI/log/config + CI → TCP + KUKA (+sim) → OPC UA + CodeGen + PLC
+(+sim) → Allarmi + Watchdog → Modbus pressa (+sim) → Persistenza +
+utenti/BCrypt + audit → Orchestrator + Recipe + Pallet → Shell Avalonia
++ i18n → Layout Engine → UI job/produzione → Deploy → Digital Twin →
+Cloud → Predittiva.
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+cos'altro manca?
+
+--------------------------------------------------------------------------
+CLAUDE
+--------------------------------------------------------------------------
+Il secondo giro riguarda ciò che serve perché un'HMI giri 10 anni in
+fabbrica e superi un collaudo.
+
+Normativa
+- Regolamento Macchine UE 2023/1230: si applica da gennaio 2027, con
+  requisiti di cybersecurity sul software di controllo.
+- Cyber Resilience Act: segnalazione vulnerabilità da settembre 2026,
+  applicazione piena prevista dicembre 2027. SBOM in CI, aggiornamenti
+  firmati, gestione vulnerabilità.
+- IEC 62443: segmentazione di rete, minimo privilegio.
+
+Sicurezza tecnica
+- Certificati OPC UA: trust store, rinnovo, rifiuto non attendibili.
+- Segreti: DPAPI o Credential Manager, non appsettings in chiaro.
+- Confine di sicurezza: l'HMI non è safety-rated; conferma a due passi
+  sui comandi critici, matrice di scrittura dei tag.
+
+Dati
+- NTP su tutti i pannelli, timestamp UTC ovunque.
+- Migrazioni DB versionate (DbUp, FluentMigrator).
+- Historian e retention (TimescaleDB/InfluxDB), politiche di purge.
+- Store-and-forward verso il cloud.
+
+Integrazione con il cliente
+- MES/ERP: import job, export produzione (REST, OPC UA server, MQTT
+  Sparkplug B).
+- OEE: disponibilità × performance × qualità.
+
+Robustezza 24/7
+- Global exception handler, crash dump, riavvio automatico.
+- Soak test 72 ore con simulatori.
+- Throttling aggiornamenti UI.
+- OpenTelemetry e health check.
+
+Configurazione e qualità
+- JSON Schema per manifest, layout, ricette; versionamento dei file.
+- Analyzers: nullable, TreatWarningsAsErrors, .editorconfig.
+- Avalonia.Headless, contract test tra versioni degli stack.
+
+Ciclo di vita
+- Allineamento a .NET LTS, durata del supporto per versione installata.
+- Assistenza remota e "pacchetto diagnostico".
+- ADR, manuale operatore, onboarding.
+
+I tre da aggiungere subito: OEE/MES, certificati OPC UA e segreti,
+NTP con timestamp UTC.
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+quanto è ambizioso il piano?
+
+--------------------------------------------------------------------------
+CLAUDE
+--------------------------------------------------------------------------
+Molto ambizioso. L'architettura è solida, ma lo scope è quello di un
+prodotto pluriennale. Le 12-16 settimane del documento bastano al massimo
+per fondamenta più 2-3 stack macchina. Il piano completo, con un team
+piccolo, richiede 12-24 mesi.
+
+Rischio principale: second-system effect, con una commessa reale da
+consegnare e LAG/FAEL da mantenere in parallelo.
+
+Voci più sottostimate
+- Manutenzione predittiva: servono dati storici di guasti che oggi non
+  ci sono. Prima soglie e trend.
+- Layout engine "zero codice": inner-platform effect.
+- Digital twin 3D: livello 1 (2.5D) ragionevole, il resto è un progetto
+  a sé.
+- Avalonia: curva di apprendimento XAML/MVVM e design system.
+
+Ridimensionamento
+- MVP prima commessa: Core/DI, KUKA, PLC con CodeGen, pressa, allarmi,
+  utenti con audit, produzione e OEE, shell Avalonia, deploy.
+- Seconda commessa: recipe engine, pallet, layout engine, i18n cloud.
+- Roadmap prodotto: digital twin, predittiva, WASM, Redis.
+- Prima ancora: slice verticale KUKA end-to-end (4-6 settimane) per
+  misurare la velocità reale del team.
+
+Prima di presentarlo
+- Incoerenze: greenfield ma con fasi di refactoring/riconciliazione
+  branch; Gantt UI non allineati.
+- Affermazioni da sostenere o togliere ("nessun competitor",
+  "−40-60% diagnostica").
+- Residui di caratteri cinesi nel testo da ripulire.
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+e se fosse sviluppato come r&d?
+
+--------------------------------------------------------------------------
+CLAUDE
+--------------------------------------------------------------------------
+Diventa molto più sensato: la domanda passa da "consegniamo tutto?" a
+"quali ipotesi validiamo, e quando decidiamo se proseguire?".
+
+Cosa guadagni
+- Niente pressione di commessa.
+- Le parti speculative diventano esperimenti a tempo.
+- Possibili agevolazioni (crediti R&S e innovazione tecnologica, bandi,
+  patent box). Attenzione: rifattorizzare con pattern standard di solito
+  è innovazione tecnologica, non ricerca. Verificare con un consulente.
+
+Rischi
+- Torre d'avorio: serve un cliente pilota interno (una commessa reale
+  come banco di prova).
+- Non chiudere mai: servono criteri di stop.
+- Taglio del budget se il valore non si vede presto.
+
+Struttura
+- Due binari: platform engineering (deliverable e date) ed esplorazioni
+  (spike 2-4 settimane con ipotesi e metrica).
+- Stage gate con livelli TRL: prosegui, ridimensiona, chiudi.
+- Metriche concrete: ore per configurare una commessa, ore di
+  diagnostica, copertura test, leak a 72 ore.
+- Raccolta dati subito.
+- Documentazione continua (diario tecnico, ADR, report).
+- Sponsor e allocazione fissa del team.
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+Layout engine "zero codice": è una trappola nota (inner-platform
+effect)... spiegami meglio
+
+--------------------------------------------------------------------------
+CLAUDE
+--------------------------------------------------------------------------
+L'inner-platform effect: per rendere un sistema configurabile senza
+codice, ci ricostruisci dentro una versione peggiore della piattaforma
+che usi già (C# + XAML).
+
+Come succede: si parte da {"control": ..., "binding": ...}, poi arriva
+"visibleWhen": "Kuka_0.Mode == 'Manual'", poi "onClick" con if/then/else.
+Hai inventato un linguaggio senza compilatore, debugger, refactoring,
+test, IntelliSense. E chi lo scrive è comunque un programmatore.
+
+Con Avalonia: XAML è già un linguaggio dichiarativo di layout, con
+binding tipizzati, stili, designer. layout.json + LayoutParser +
+ControlFactory via reflection reimplementano XAML in piccolo.
+
+Alternativa
+- Configurazione per i dati (IP, numeri, stack attivi, soglie,
+  traduzioni).
+- Codice per comportamento e composizione: pagine XAML di commessa che
+  compongono i controlli degli stack.
+- Template e scaffolding con dotnet new.
+
+Un layout engine ha senso se l'impaginazione la cambia a runtime chi non
+sviluppa, limitato a disporre widget predefiniti.
+
+Segnale d'allarme: quando qualcuno propone if o espressioni nel JSON.
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+okay forse mi sono spiegato male, la configurazione che intendo io è più
+sul layout dell'impianto: se in un impianto il robot è a destra e la
+pressa a sinistra e nell'altro diversamente, i comandi manuali si
+raggiungono cliccando sul macchinario nel digital twin; da config scelgo
+la posizione di robot, pressa, rulliere, assi cartesiani, mentre
+l'interfaccia del robot sarà sempre uguale; se in un caso particolare va
+cambiata si modifica il codice
+
+--------------------------------------------------------------------------
+CLAUDE
+--------------------------------------------------------------------------
+Così è perfetto: configuri dati di topologia, non comportamento.
+
+JSON della scena: units mm, dimensioni impianto, machines con id, type,
+x, y, rotation (più parametri come length per rulliere, strokeX/Y per
+assi cartesiani), zones (recinzioni, porte).
+
+Codice nello stack: registry.AddMachineType("kuka.robot", visual: ...,
+detail: id => new KukaManualView(id)). Il click apre la vista manuale.
+
+Accorgimenti
+- Coordinate reali in mm (dal CAD), non pixel: servono per 2.5D e 3D.
+- id coerenti con il manifest, validati all'avvio.
+- Tipi parametrici per geometrie variabili.
+- Zone e collegamenti.
+- Area cliccabile minima per touch con guanti.
+
+Regola: nel JSON "dove" e "cosa"; il "come" nel codice dello stack.
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+allo stesso modo la configurazione della produzione conterrà ad esempio
+i pallet di carico e scarico e cose del genere
+
+--------------------------------------------------------------------------
+CLAUDE
+--------------------------------------------------------------------------
+Stesso principio: la configurazione dice quali risorse esistono e con
+quali parametri (ruolo, capacità, peso massimo, robot servente, flag
+semplici, politica scelta per nome).
+
+Nel codice: la macchina a stati del pallet e l'implementazione delle
+politiche (IPalletSelectionStrategy).
+
+Una sola fonte per ogni informazione: posizione nel layout impianto,
+ruolo e capacità nella configurazione di produzione, collegati da id.
+
+Attenzione: pallet state machine e ricette come sequenze di step in JSON
+(documento §10) sono vicine alla trappola. Molti flag che si combinano
+sono comportamento: meglio una strategia in codice.
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+che altre cose erano suggerite come configurabili?
+
+--------------------------------------------------------------------------
+CLAUDE
+--------------------------------------------------------------------------
+(Lettura parziale: la pagina si è troncata verso il §14.)
+
+Legittime: manifest.json, parametri macchina (IOptions<T>), parametri
+OPC UA, autenticazione, logging, risorse, definizioni CODESYS come input
+del CodeGen, soglie di manutenzione.
+
+Da tenere d'occhio: componenti della predittiva (aggregatori come
+insieme chiuso), binding del digital twin (posizioni nel layout
+impianto), traduzioni cloud (cache locale affidabile).
+
+Vicine alla trappola: layout.json delle schermate, ricette come sequenze
+di step, macchina a stati pallet con transizioni per impianto.
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+/export
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+[Incollato output Claude Code su Sistec.5309AC (FAEL): ricette come
+ProductionConfig (tipo, lunghezza, pannelli M/F), download in sequenza
+punzonatrice BS2308 → PLC → pressa Gade → running; ricette di saldatura
+in Other.ini; pallet AB calcolati dall'HMI da sensori, pallet C letti
+dal PLC come INT 0..5; calcolo delle 17 word di punzonatura da lunghezza
+e costanti; programma pressa scelto per fasce di lunghezza.]
+attualmente è così:
+
+--------------------------------------------------------------------------
+CLAUDE
+--------------------------------------------------------------------------
+Conferma: la ricetta reale è dati di lotto; il resto è derivato.
+
+Ricette: tre livelli
+- Impianto: calibrazione, limiti, fattore unità.
+- Prodotto/famiglia: notching, firstDrill, margini, passo, tabella
+  programmi pressa (profilo prodotto selezionabile).
+- Lotto: tipo, lunghezza, pannelli.
+
+Calcolo delle 17 word: funzione pura, primo candidato per test NUnit.
+Tabella pressa: validatore con intervalli [min, max) contigui (bug al
+confine 3200/4300). Sequenza di download: JobStateMachine nei Services.
+
+Pallet: il PLC come unico proprietario dello stato. Interi magici da
+sostituire con ENUM CODESYS + CodeGen. Logica per numero di sensori =
+comportamento nascosto.
+
+Pattern ricorrente: handshake comando/ack → primitiva IPlcHandshake
+generata dal CodeGen.
+
+Discrepanza: documento dice pressa ESA (Modbus), codice dice Gade.
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+quindi per quanto riguarda ricette e pallet tu cosa metteresti in config
+json ?
+
+--------------------------------------------------------------------------
+CLAUDE
+--------------------------------------------------------------------------
+Il lotto non è configurazione (DB/MES).
+
+1. config/plant.json: limiti, calibrazione, ricette di saldatura (se le
+   scrive l'HMI).
+2. config/products/door-standard.json: geometria in mm, pressPrograms
+   con intervalli [fromMm, toMm) validati.
+3. config/production.json: pallet con id, role, stateTag, confirm
+   (l'ack lo trova il CodeGen), validati contro i tag generati.
+
+Fuori dal JSON: formule delle word, sequenza di download, significato
+degli stati, logica dai sensori, abilitazioni per livello utente.
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+okay, quando parlo di config dei pallet intendo che possono esserci
+diversi tipi e misure di pallet e rack, da json scelgo quali esistono in
+quell'impianto così l'operatore può scegliere solo quelli
+
+--------------------------------------------------------------------------
+CLAUDE
+--------------------------------------------------------------------------
+Catalogo + elenco abilitati: dati puri.
+
+1. pallets.catalog.json condiviso: id, kind (pallet/rack), misure,
+   portata, plcCode.
+2. config/production.json per impianto: enabledTypes, default,
+   eventualmente restrizioni per posizione.
+
+Nel codice: filtro nella schermata nuova produzione (abilitati ∩
+compatibili con il lotto); direzione destra→sinistra come campo separato
+invece dell'offset +10.
+
+Validazione: id esistenti, default tra gli abilitati, plcCode univoci,
+compatibilità con la versione del programma PLC.
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+okay invece ancora la ricetta non mi è chiara, spiegami in parole povere
+cosa il codice attuale ha, elabora e invia sotto forma di codice c#
+
+--------------------------------------------------------------------------
+CLAUDE
+--------------------------------------------------------------------------
+[Creato file RicettaAttuale_Spiegata.cs: ricostruzione semplificata con
+modello ricetta, costanti, calcolo word, scelta programma pressa,
+sequenza di download. Punti "DA VERIFICARE" segnalati.]
+
+In parole povere:
+1. L'operatore inserisce tipo, lunghezza, pannelli M/F e codici ordine.
+2. L'HMI calcola dove forare (fori, cerniere a 1/3 e 2/3, maniglia),
+   corregge con la calibrazione, converte in decimi di mm, scrive e
+   rilegge le 17 word.
+3. Il PLC riceve id lotto, lunghezza nominale, numero pannelli; calcola
+   da sé il piano di taglio.
+4. La pressa riceve il nome di un programma scelto per fasce; l'operatore
+   riceve il promemoria registri.
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+okay, il punto è che i nostri impianti sono tutti diversi, questo fa
+portoni, un altro fa cappe di aspirazione e le ricette sono diverse,
+cosa posso configurare e cosa mi conviene scrivere ogni volta come
+codice?
+
+--------------------------------------------------------------------------
+CLAUDE
+--------------------------------------------------------------------------
+Distinguere ciò che cambia con il prodotto da ciò che cambia con
+l'impianto.
+
+Moduli prodotto (Sistec.Product.Portoni, Sistec.Product.Cappe):
+modello ricetta, validazione, piano di download (IProductModule<TRecipe>
+con Validate e BuildPlan). La piattaforma esegue il DownloadPlan in modo
+generico.
+
+In codice (una volta per famiglia): modello, validazione, calcoli,
+macchine coinvolte, eventuale schermata dedicata.
+In configurazione (per impianto): modulo attivo, profilo prodotto,
+calibrazioni, varianti abilitate, default e range.
+Nella piattaforma: ciclo di vita job, storico, MES, permessi, audit,
+motore di download.
+
+Accorgimenti: ricette come JSON nel DB con productType e schemaVersion;
+form generato dagli attributi ([Range], [Display]).
+
+Regola: nuovo prodotto → codice; stesso prodotto altro impianto →
+config; un numero → config; una regola di calcolo → codice con test.
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+ma domanda, la ricetta non dovrebbe essere compito del plc? l'HMI non
+dovrebbe sapere solo che la ricetta A chiama la ricetta A sul PLC, il
+programma A del robot e il programma A della pressa?
+
+--------------------------------------------------------------------------
+CLAUDE
+--------------------------------------------------------------------------
+Dipende da com'è fatto il prodotto.
+
+Modello A (riferimento): ricetta A → ricetta 12 PLC, programma 5 robot,
+programma X pressa. HMI semplice, macchina indipendente dall'HMI,
+ricetta lato HMI interamente configurabile. Limite: varianti come
+catalogo finito.
+
+Modello B (parametrico): lunghezza continua 2100-5500, qualcuno deve
+calcolare. Il nodo è dove.
+
+FAEL oggi è misto: pressa = modello A, piano di taglio nel PLC, quote di
+punzonatura nell'HMI. Questa divisione è il vero problema.
+
+Criteri: senza HMI e determinismo → PLC; calcoli complessi, test, riuso
+→ C#; chi mantiene quella parte.
+
+ISA-88: l'HMI/MES gestisce le ricette, il controllore le esegue.
+
+Consiglio: regola unica (HMI invia parametri di prodotto e riferimenti;
+chi esegue calcola), eccezione dichiarata dove una macchina accetta solo
+coordinate, decisione condivisa con il team PLC. Se va così, i moduli
+prodotto si riducono quasi a zero.
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+[Incollato output Claude Code su PolyMove (5394B, ASP.NET Core + EF Core
++ DevExtreme): Recipe con parametri di processo e riferimenti a
+RobotRecipe, PressRecipe, ToolingSet; ordini RecipeHistory con snapshot
+JSON RecipeUsedData, stati Scheduled/Active/Completed/Paused/Aborted/
+Canceled, coda e priorità; ExecuteRecipe scrive PLC_Main.SPV_CM.Recipe.*
+e alza LoadRecipe_Cmd; avanzamento da PiecesDone; OrderListEnabled;
+IsRunInfinite.]
+questo su un altro impianto
+
+--------------------------------------------------------------------------
+CLAUDE
+--------------------------------------------------------------------------
+PolyMove è quasi il modello A fatto bene: il migliore dei tre, da usare
+come base.
+
+Cosa fa bene: anagrafica separata dall'ordine (ISA-88), fotografia della
+ricetta al lancio, riferimenti non logica, ciclo di vita esplicito,
+avanzamento dal PLC, coda tirata dal PLC.
+
+Da migliorare: colonne specifiche del prodotto nel DB (meglio JSON +
+schema), numeri magici (General == 3), riferimenti non verificati
+contro le macchine, conferma del download (ack e rilettura), abort
+automatico senza conferma/audit, flag IsRunInfinite.
+
+Per la piattaforma: parametri dichiarati come dati (id, type, unit, min,
+max, tag) + references. Il motore fa form, salvataggio, snapshot,
+scrittura con verifica, avanzamento, coda. Il caso FAEL si inserisce
+come estensione C# opzionale.
+
+Nota: PolyMove è web, FAEL/LAG WinForms. Prima di scegliere Avalonia,
+valutare seriamente anche l'opzione web.
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+ancora non mi è chiaro che calcoli fa l'HMI di FAEL per la ricetta
+
+--------------------------------------------------------------------------
+CLAUDE
+--------------------------------------------------------------------------
+Un solo vero calcolo: dalla lunghezza ricava dove forare.
+
+Esempio con 3000 mm (notching 54, primo foro 120, cerniera −28/+48,
+passo 250):
+- Primo foro: 120 − 54 = 66 mm
+- Lunghezza utile: 3000 − 108 = 2892 mm
+- Cerniera 1 a 1/3: 964 mm, zona 936 → 1012
+- Cerniera 2 a 2/3: 1928 mm, zona 1900 → 1976
+- Ultimo foro: 3000 − 120 − 54 = 2826 mm
+- Fori a passo 250 nei tre tratti: circa 3 + 3 + 3
+- Maniglia: margini 3 mm, formula da verificare
+
+Poi calibrazione (guadagno e offset) e conversione in decimi di mm.
+Scrittura e rilettura delle 17 word.
+
+Non sono calcoli: scelta del programma pressa da tabella, promemoria
+registri (2892 mm), valori inoltrati al PLC.
+
+Cautela: conteggio fori e formula maniglia da verificare; ottimo primo
+test NUnit con L = 3000.
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+e questo non potrebbe essere configurabile?
+
+--------------------------------------------------------------------------
+CLAUDE
+--------------------------------------------------------------------------
+In parte sì. Tre livelli:
+
+1. Costanti: già configurabili (Other.ini).
+2. Forma della regola come modello parametrico (il punto giusto):
+   usableLength, endHoles, hinges con frazione e margini, fillHoles con
+   passo e arrotondamento, handle. Un portone a tre cerniere è un
+   elemento in più. Il codice implementa il modello una volta; la
+   traduzione in word resta nello stack della punzonatrice.
+3. Formule scritte nel JSON con un motore di espressioni: possibile ma è
+   la trappola. Solo senza condizioni e con test obbligatori.
+
+In ogni caso: goldenCases nel profilo (lunghezza → word attese, misurati
+su pezzi reali), eseguiti all'avvio e in CI.
+
+Limite: il modello copre le varianti di portone; un prodotto con
+geometria diversa (cappe) richiede un altro modello in codice, oppure il
+calcolo si sposta nel PLC.
+
+--------------------------------------------------------------------------
+UTENTE
+--------------------------------------------------------------------------
+salva la chat in un txt
+
+==========================================================================
+Fine conversazione
